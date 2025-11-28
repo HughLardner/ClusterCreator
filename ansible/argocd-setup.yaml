@@ -33,10 +33,23 @@
       tags:
         - always
 
-    - name: Load ArgoCD vault secrets (if exists)
+    - name: Check if ArgoCD vault file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/argocd/vault/main.yaml"
+      register: argocd_vault_file
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      run_once: true
+      tags:
+        - always
+
+    - name: Load ArgoCD vault secrets
       ansible.builtin.include_vars:
         file: argocd/vault/main.yaml
-      when: argocd_vault_enabled | default(false) | bool
+      when: argocd_vault_file.stat.exists
+      delegate_to: localhost
+      run_once: true
       tags:
         - always
 
@@ -301,14 +314,14 @@
       tags:
         - argocd_bootstrap
 
-    - name: Apply App of Apps bootstrap application
+    - name: Apply App of Apps services application
       ansible.builtin.shell:
         cmd: |
           cat <<EOF | kubectl apply -f -
           apiVersion: argoproj.io/v1alpha1
           kind: Application
           metadata:
-            name: bootstrap-apps
+            name: services
             namespace: {{ argocd_namespace }}
             finalizers:
               - resources-finalizer.argocd.argoproj.io
@@ -317,7 +330,7 @@
             source:
               repoURL: {{ argocd_repo_url }}
               targetRevision: main
-              path: kubernetes/argocd/bootstrap
+              path: kubernetes/argocd/services
               kustomize:
                 commonAnnotations:
                   argocd.argoproj.io/sync-wave: "0"
@@ -346,10 +359,10 @@
       tags:
         - argocd_bootstrap
 
-    - name: Wait for App of Apps to be synced
+    - name: Wait for services App of Apps to be synced
       ansible.builtin.shell:
         cmd: >
-          kubectl wait --for=condition=Healthy application/bootstrap-apps
+          kubectl wait --for=condition=Healthy application/services
           -n {{ argocd_namespace }} --timeout=300s || true
       args:
         executable: /bin/bash

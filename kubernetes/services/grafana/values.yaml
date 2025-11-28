@@ -1,0 +1,75 @@
+---
+# Grafana Helm Chart Values
+# https://github.com/grafana/helm-charts
+
+adminUser: admin
+adminPassword: ""
+existingSecret: grafana-admin-credentials
+existingSecretKey: admin-password
+
+persistence:
+  enabled: true
+  type: pvc
+  storageClassName: longhorn
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: grafana.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: grafana-tls
+      hosts:
+        - grafana.local
+
+service:
+  type: ClusterIP
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server.monitoring:80
+        access: proxy
+        isDefault: true
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    kubernetes:
+      gnetId: 7249
+      revision: 1
+      datasource: Prometheus
+

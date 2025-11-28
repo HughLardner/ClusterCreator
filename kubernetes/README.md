@@ -1,35 +1,95 @@
 # Kubernetes Configurations
 
-This directory contains Kubernetes manifests and Argo CD Application definitions for cluster bootstrapping and management.
+This directory contains Kubernetes manifests and Argo CD Application definitions for cluster management.
 
 ## Directory Structure
 
 ```
 kubernetes/
-└── argocd/
-    └── bootstrap/
-        ├── app-of-apps.yaml    # Root App of Apps application
-        ├── kustomization.yaml  # Kustomize configuration
-        ├── traefik.yaml        # Traefik ingress controller
-        ├── longhorn.yaml       # Longhorn distributed storage
-        ├── minio.yaml          # MinIO object storage
-        └── grafana.yaml        # Grafana monitoring
+├── argocd/
+│   └── services/
+│       └── app-of-apps.yaml    # Root App of Apps for services
+├── services/                   # Cluster infrastructure services
+│   ├── traefik/
+│   │   ├── application.yaml
+│   │   └── values.yaml
+│   ├── longhorn/
+│   │   ├── application.yaml
+│   │   └── values.yaml
+│   ├── minio/
+│   │   ├── application.yaml
+│   │   └── values.yaml
+│   ├── grafana/
+│   │   ├── application.yaml
+│   │   └── values.yaml
+│   ├── kustomization.yaml
+│   └── README.md
+├── apps/                       # End-user applications
+│   └── README.md
+└── secrets/                    # Sealed Secrets
+    ├── grafana-sealed-secret.yaml
+    ├── minio-sealed-secret.yaml
+    └── README.md
 ```
+
+## Services vs Apps
+
+### Services (`services/`)
+
+**Services** are infrastructure components that manage or support the cluster:
+- Ingress controllers (Traefik)
+- Storage systems (Longhorn)
+- Object storage (MinIO)
+- Monitoring (Grafana)
+- etc.
+
+### Apps (`apps/`)
+
+**Apps** are end-user applications deployed on the cluster:
+- Web applications
+- APIs
+- Databases for applications
+- etc.
 
 ## App of Apps Pattern
 
-The `bootstrap-apps` Application uses the [App of Apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) to manage multiple applications declaratively. This allows Argo CD to bootstrap the cluster with core services automatically.
+The `services` Application uses the [App of Apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) to manage multiple services declaratively. This allows Argo CD to bootstrap the cluster with core services automatically.
 
 ### Deployment Order (Sync Waves)
 
-Applications are deployed in the following order using sync waves:
+Services are deployed in the following order using sync waves:
 
 1. **Wave 0**: Traefik (ingress controller - must be first)
 2. **Wave 1**: Longhorn (storage - needed by other services)
 3. **Wave 2**: MinIO (object storage)
 4. **Wave 3**: Grafana (monitoring)
 
-## Applications
+## Service Configuration
+
+Each service has its own directory with:
+- `application.yaml` - Argo CD Application manifest
+- `values.yaml` - Helm chart values
+
+### Customizing Services
+
+Edit the `values.yaml` file for each service to customize its configuration. Changes are automatically synced by Argo CD.
+
+Example: To change Traefik replicas, edit `services/traefik/values.yaml`:
+
+```yaml
+deployment:
+  replicas: 3  # Changed from 2
+```
+
+### Adding a New Service
+
+1. Create a new directory: `kubernetes/services/your-service/`
+2. Create `values.yaml` with Helm chart values
+3. Create `application.yaml` with Argo CD Application manifest
+4. Add the service to `services/kustomization.yaml`
+5. Commit and push - Argo CD will automatically deploy it
+
+## Current Services
 
 ### Traefik
 
@@ -75,37 +135,9 @@ Applications are deployed in the following order using sync waves:
   - Web UI at `grafana.local`
   - Uses Longhorn for persistence
 
-## Configuration
-
-### Customizing Applications
-
-Edit the individual application YAML files in `kubernetes/argocd/bootstrap/` to customize:
-
-- Helm chart versions
-- Resource requests/limits
-- Ingress hostnames
-- Storage configurations
-- Replica counts
-
-### Adding New Applications
-
-1. Create a new Application manifest in `kubernetes/argocd/bootstrap/`
-2. Add it to `kustomization.yaml`
-3. Set appropriate sync wave annotation if ordering matters
-4. Commit and push to the repository
-5. Argo CD will automatically sync the new application
-
-### Disabling Bootstrap
-
-To disable automatic bootstrap deployment, set in `ansible/argocd/defaults/main-argocd.yaml`:
-
-```yaml
-argocd_bootstrap_enabled: false
-```
-
 ## Ingress Configuration
 
-All applications are configured with Traefik ingress. Ensure:
+All services are configured with Traefik ingress. Ensure:
 
 - Traefik is deployed first (sync wave 0)
 - DNS entries point to the Traefik LoadBalancer IP
@@ -121,7 +153,7 @@ Ensure Longhorn is healthy before deploying services that depend on storage.
 
 ## Troubleshooting
 
-### Applications Not Syncing
+### Services Not Syncing
 
 1. Check Argo CD repository connection:
 
@@ -138,20 +170,12 @@ Ensure Longhorn is healthy before deploying services that depend on storage.
 3. Check application status:
    ```bash
    kubectl get applications -n argocd
-   argocd app get bootstrap-apps
+   argocd app get services
    ```
-
-### Helm Repository Issues
-
-Helm repository secrets are automatically created by the Ansible playbook. Verify they exist:
-
-```bash
-kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=repository
-```
 
 ### Sync Wave Issues
 
-If applications are deploying in the wrong order, check sync wave annotations:
+If services are deploying in the wrong order, check sync wave annotations:
 
 ```bash
 kubectl get applications -n argocd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.argocd\.argoproj\.io/sync-wave}{"\n"}{end}'

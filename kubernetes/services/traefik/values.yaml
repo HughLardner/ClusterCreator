@@ -1,0 +1,63 @@
+---
+# Traefik Helm Chart Values
+# https://github.com/traefik/traefik-helm-chart
+
+deployment:
+  replicas: 2
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    matchRule: Host(`traefik.local`)
+    tls:
+      secretName: traefik-dashboard-tls
+
+ports:
+  web:
+    port: 80
+    exposedPort: 80
+    protocol: TCP
+  websecure:
+    port: 443
+    exposedPort: 443
+    protocol: TCP
+
+service:
+  type: LoadBalancer
+  annotations:
+    metallb.universe.tf/address-pool: default
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 256Mi
+    cpu: 200m
+
+globalArguments:
+  - "--global.checknewversion=false"
+  - "--global.sendanonymoususage=false"
+
+additionalArguments:
+  - "--entrypoints.web.address=:80"
+  - "--entrypoints.websecure.address=:443"
+  - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+  - "--certificatesresolvers.letsencrypt.acme.email=admin@local"
+  - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+  - "--providers.kubernetesingress=true"
+  - "--providers.kubernetescrd=true"
+  - "--api.dashboard=true"
+  - "--api.insecure=false"
+  - "--log.level=INFO"
+  - "--accesslog=true"
+  - "--metrics.prometheus=true"
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9100"
+  prometheus.io/path: "/metrics"
+

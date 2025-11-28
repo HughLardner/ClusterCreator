@@ -1,0 +1,49 @@
+---
+# MinIO Helm Chart Values
+# https://github.com/minio/operator
+
+mode: distributed
+replicas: 4
+drivesPerNode: 1
+
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 100Gi
+
+resources:
+  requests:
+    memory: 2Gi
+    cpu: 1000m
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: minio.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: minio-tls
+      hosts:
+        - minio.local
+
+auth:
+  rootUser: ""
+  rootPassword: ""
+  existingSecret: minio-root-credentials
+  rootUserKey: root-user
+  rootPasswordKey: root-password
+
+buckets:
+  - name: argocd
+    policy: none
+    purge: false
+  - name: terraform-state
+    policy: none
+    purge: false

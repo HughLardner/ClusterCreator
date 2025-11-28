@@ -1,0 +1,33 @@
+---
+# Longhorn Helm Chart Values
+# https://github.com/longhorn/longhorn
+
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: 3
+
+defaultSettings:
+  defaultDataPath: /var/lib/longhorn
+  replicaSoftAntiAffinity: true
+  storageOverProvisioningPercentage: 100
+  storageMinimalAvailablePercentage: 25
+  defaultReplicaCount: 3
+  defaultDataLocality: disabled
+  guaranteedEngineCPU: 0.25
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: longhorn.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: longhorn-tls
+      hosts:
+        - longhorn.local
