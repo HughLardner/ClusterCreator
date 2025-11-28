@@ -16,12 +16,11 @@ spec:
       chart: grafana
       helm:
         releaseName: grafana
+        valueFiles:
+          - $values/kubernetes/services/grafana/values.yaml
     - repoURL: https://github.com/HughLardner/ClusterCreator
       targetRevision: main
-      path: kubernetes/services
-      helm:
-        valueFiles:
-          - grafana/values.yaml
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

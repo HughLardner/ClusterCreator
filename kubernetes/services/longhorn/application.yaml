@@ -16,12 +16,11 @@ spec:
       chart: longhorn
       helm:
         releaseName: longhorn
+        valueFiles:
+          - $values/kubernetes/services/longhorn/values.yaml
     - repoURL: https://github.com/HughLardner/ClusterCreator
       targetRevision: main
-      path: kubernetes/services
-      helm:
-        valueFiles:
-          - longhorn/values.yaml
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: longhorn-system

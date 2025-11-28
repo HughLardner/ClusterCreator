@@ -16,12 +16,11 @@ spec:
       chart: traefik
       helm:
         releaseName: traefik
+        valueFiles:
+          - $values/kubernetes/services/traefik/values.yaml
     - repoURL: https://github.com/HughLardner/ClusterCreator
       targetRevision: main
-      path: kubernetes/services
-      helm:
-        valueFiles:
-          - traefik/values.yaml
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik-system
