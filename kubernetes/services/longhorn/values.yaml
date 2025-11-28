@@ -2,6 +2,11 @@
 # Longhorn Helm Chart Values
 # https://github.com/longhorn/longhorn
 
+# Disable pre-upgrade checker job for fresh installs (can cause timing issues with Argo CD)
+# The job will run automatically on upgrades when upgradeVersionCheck is enabled
+preUpgradeChecker:
+  jobEnabled: false
+
 persistence:
   defaultClass: true
   defaultClassReplicaCount: 3
