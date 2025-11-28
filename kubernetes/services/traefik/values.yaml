@@ -53,6 +53,7 @@ additionalArguments:
   - "--certificatesresolvers.letsencrypt.acme.email=admin@local"
   - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
   - "--providers.kubernetesingress=true"
+  - "--providers.kubernetesingress.publishedservice.enabled=true"
   - "--providers.kubernetescrd=true"
   - "--api.dashboard=true"
   - "--api.insecure=false"
