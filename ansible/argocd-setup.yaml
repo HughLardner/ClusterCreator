@@ -1,0 +1,370 @@
+- name: Install ArgoCD on Kubernetes Cluster
+  hosts: controlplane[0]
+  gather_facts: false
+  tags:
+    - argocd_basic_install
+  vars:
+    cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
+  pre_tasks:
+    - name: Check if Sealed Secrets controller is installed
+      ansible.builtin.shell:
+        cmd: kubectl get deployment sealed-secrets-controller -n kube-system 2>/dev/null && echo "exists" || echo "not_exists"
+      args:
+        executable: /bin/bash
+      register: sealed_secrets_check
+      changed_when: false
+      failed_when: false
+
+    - name: Warn if Sealed Secrets is not installed
+      ansible.builtin.debug:
+        msg:
+          - "⚠️  WARNING: Sealed Secrets controller not found!"
+          - "Bootstrap applications (Grafana, MinIO) require secrets that must be created via Sealed Secrets."
+          - "Install Sealed Secrets first by running:"
+          - "  ansible-playbook ansible/sealed-secrets-setup.yaml -e cluster_name={{ cluster_name }}"
+          - "Or manually: kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml"
+      when: sealed_secrets_check.stdout == "not_exists"
+      tags:
+        - always
+  tasks:
+    - name: Load ArgoCD defaults
+      ansible.builtin.include_vars:
+        file: argocd/defaults/main-argocd.yaml
+      tags:
+        - always
+
+    - name: Load ArgoCD vault secrets (if exists)
+      ansible.builtin.include_vars:
+        file: argocd/vault/main.yaml
+      when: argocd_vault_enabled | default(false) | bool
+      tags:
+        - always
+
+    - name: Add ArgoCD Helm repository
+      ansible.builtin.shell:
+        cmd: helm repo add argo https://argoproj.github.io/argo-helm
+      args:
+        executable: /bin/bash
+      ignore_errors: true # Ignore if repo already exists
+
+    - name: Update Helm repositories
+      ansible.builtin.shell:
+        cmd: helm repo update
+      args:
+        executable: /bin/bash
+
+    - name: Show available ArgoCD Helm chart versions
+      ansible.builtin.shell:
+        cmd: helm search repo argo/argo-cd --versions | head -10
+      args:
+        executable: /bin/bash
+      register: argocd_versions
+      changed_when: false
+      tags:
+        - argocd_info
+      when: argocd_version is not defined or argocd_version | length == 0
+
+    - name: Check for existing ArgoCD Helm release
+      ansible.builtin.shell:
+        cmd: helm list -n {{ argocd_namespace }} -q | grep -q "^argocd$" && echo "exists" || echo "not_exists"
+      args:
+        executable: /bin/bash
+      register: argocd_release_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check for stuck Helm release
+      ansible.builtin.shell:
+        cmd: helm status argocd -n {{ argocd_namespace }} 2>&1 | grep -q "another operation" && echo "stuck" || echo "ok"
+      args:
+        executable: /bin/bash
+      register: helm_stuck_check
+      changed_when: false
+      failed_when: false
+      when: argocd_release_check.stdout == "exists"
+
+    - name: Clean up stuck Helm release by deleting the release
+      ansible.builtin.shell:
+        cmd: helm delete argocd -n {{ argocd_namespace }} --ignore-not-found
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_release_check.stdout == "exists" and
+        helm_stuck_check.stdout == "stuck"
+      tags:
+        - argocd_cleanup
+
+    - name: Wait for Helm release to be fully deleted
+      ansible.builtin.pause:
+        seconds: 5
+      when: >
+        argocd_release_check.stdout == "exists" and
+        helm_stuck_check.stdout == "stuck"
+      tags:
+        - argocd_cleanup
+
+    - name: Install ArgoCD (with version)
+      ansible.builtin.shell:
+        cmd: >
+          helm upgrade --install argocd argo/argo-cd
+          --namespace {{ argocd_namespace }}
+          --create-namespace
+          --version {{ argocd_version }}
+          --set server.service.type=LoadBalancer
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_version is defined and
+        argocd_version | length > 0 and
+        argocd_version | trim | length > 0
+
+    - name: Install ArgoCD (latest version)
+      ansible.builtin.shell:
+        cmd: >
+          helm upgrade --install argocd argo/argo-cd
+          --namespace {{ argocd_namespace }}
+          --create-namespace
+          --set server.service.type=LoadBalancer
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_version is not defined or
+        argocd_version | length == 0 or
+        argocd_version | trim | length == 0
+
+    - name: Wait for ArgoCD server deployment to be ready
+      ansible.builtin.shell:
+        cmd: kubectl rollout status deployment/argocd-server --namespace {{ argocd_namespace }} --timeout=600s
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_wait
+
+    - name: Wait for ArgoCD repo server deployment to be ready
+      ansible.builtin.shell:
+        cmd: kubectl rollout status deployment/argocd-repo-server --namespace {{ argocd_namespace }} --timeout=600s
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_wait
+
+    - name: Wait for ArgoCD application controller deployment to be ready
+      ansible.builtin.shell:
+        cmd: kubectl rollout status statefulset/argocd-application-controller --namespace {{ argocd_namespace }} --timeout=600s
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_wait
+
+    - name: Validate ArgoCD repository password is set
+      ansible.builtin.assert:
+        that:
+          - argocd_repo_password is defined
+          - argocd_repo_password | length > 0
+        fail_msg: "argocd_repo_password must be set. Use Ansible Vault or set via -e argocd_repo_password='your-token'"
+        success_msg: "ArgoCD repository password is configured"
+      tags:
+        - argocd_repo_config
+
+    - name: Create ArgoCD repository secret
+      ansible.builtin.shell:
+        cmd: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: {{ argocd_repo_name }}-repo
+            namespace: {{ argocd_namespace }}
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            name: {{ argocd_repo_name }}
+            type: {{ argocd_repo_type }}
+            url: {{ argocd_repo_url }}
+            username: {{ argocd_repo_username }}
+            password: {{ argocd_repo_password }}
+            project: {{ argocd_project }}
+          EOF
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_repo_config
+
+    - name: Verify repository connection
+      ansible.builtin.shell:
+        cmd: >
+          kubectl get secret {{ argocd_repo_name }}-repo
+          --namespace {{ argocd_namespace }}
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_repo_config
+
+    - name: Display ArgoCD admin password
+      ansible.builtin.shell:
+        cmd: >
+          kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret
+          -o jsonpath="{.data.password}" | base64 -d
+      args:
+        executable: /bin/bash
+      register: argocd_admin_password
+      changed_when: false
+      tags:
+        - argocd_info
+
+    - name: Get ArgoCD server LoadBalancer IP
+      ansible.builtin.shell:
+        cmd: >
+          kubectl get svc argocd-server -n {{ argocd_namespace }}
+          -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+      args:
+        executable: /bin/bash
+      register: argocd_server_ip
+      changed_when: false
+      tags:
+        - argocd_info
+
+    - name: Generate ArgoCD ingress configuration
+      ansible.builtin.template:
+        src: helpers/argocd_ingress.yaml.j2
+        dest: "/tmp/argocd_ingress.yaml"
+      when: argocd_ingress_enabled | default(false) | bool
+      tags:
+        - argocd_ingress
+
+    - name: Apply ArgoCD ingress configuration
+      ansible.builtin.command:
+        cmd: kubectl apply -f /tmp/argocd_ingress.yaml
+      when: argocd_ingress_enabled | default(false) | bool
+      tags:
+        - argocd_ingress
+
+    - name: Configure ArgoCD Helm repository secrets
+      ansible.builtin.shell:
+        cmd: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: longhorn-helm-repo
+            namespace: {{ argocd_namespace }}
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            name: longhorn
+            type: helm
+            url: https://charts.longhorn.io
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: minio-helm-repo
+            namespace: {{ argocd_namespace }}
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            name: minio
+            type: helm
+            url: https://charts.min.io/
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: traefik-helm-repo
+            namespace: {{ argocd_namespace }}
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            name: traefik
+            type: helm
+            url: https://traefik.github.io/charts
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: grafana-helm-repo
+            namespace: {{ argocd_namespace }}
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            name: grafana
+            type: helm
+            url: https://grafana.github.io/helm-charts
+          EOF
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_bootstrap
+
+    - name: Apply App of Apps bootstrap application
+      ansible.builtin.shell:
+        cmd: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: bootstrap-apps
+            namespace: {{ argocd_namespace }}
+            finalizers:
+              - resources-finalizer.argocd.argoproj.io
+          spec:
+            project: default
+            source:
+              repoURL: {{ argocd_repo_url }}
+              targetRevision: main
+              path: kubernetes/argocd/bootstrap
+              kustomize:
+                commonAnnotations:
+                  argocd.argoproj.io/sync-wave: "0"
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: {{ argocd_namespace }}
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+                allowEmpty: false
+              syncOptions:
+                - CreateNamespace=true
+                - PrunePropagationPolicy=foreground
+                - PruneLast=true
+              retry:
+                limit: 5
+                backoff:
+                  duration: 5s
+                  factor: 2
+                  maxDuration: 3m
+          EOF
+      args:
+        executable: /bin/bash
+      when: argocd_bootstrap_enabled | default(true) | bool
+      tags:
+        - argocd_bootstrap
+
+    - name: Wait for App of Apps to be synced
+      ansible.builtin.shell:
+        cmd: >
+          kubectl wait --for=condition=Healthy application/bootstrap-apps
+          -n {{ argocd_namespace }} --timeout=300s || true
+      args:
+        executable: /bin/bash
+      tags:
+        - argocd_bootstrap
+        - argocd_wait
+
+    - name: Display ArgoCD access information
+      ansible.builtin.debug:
+        msg:
+          - "ArgoCD has been installed successfully!"
+          - "ArgoCD Server URL: https://{{ argocd_server_ip.stdout | default('Pending LoadBalancer IP') }}"
+          - "Admin Username: admin"
+          - "Admin Password: {{ argocd_admin_password.stdout }}"
+          - "Repository '{{ argocd_repo_name }}' has been configured with access to {{ argocd_repo_url }}"
+          - "Bootstrap applications (Longhorn, MinIO, Traefik, Grafana) are being deployed via App of Apps pattern"
+      tags:
+        - argocd_info

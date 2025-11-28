@@ -1,0 +1,43 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: {{ argocd_namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ argocd_namespace }}-argocd-server-headers@kubernetescrd
+{% if argocd_ingress_cert_manager_enabled | default(false) %}
+    cert-manager.io/cluster-issuer: {{ argocd_ingress_cert_issuer | default('letsencrypt-prod') }}
+{% endif %}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: {{ argocd_ingress_host | default('argocd.local') }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
+{% if argocd_ingress_tls_enabled | default(true) %}
+  tls:
+    - hosts:
+        - {{ argocd_ingress_host | default('argocd.local') }}
+      secretName: argocd-server-tls
+{% endif %}
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: argocd-server-headers
+  namespace: {{ argocd_namespace }}
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: https
+

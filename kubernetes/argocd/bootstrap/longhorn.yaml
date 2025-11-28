@@ -1,0 +1,64 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.longhorn.io
+    targetRevision: 1.6.1
+    chart: longhorn
+    helm:
+      releaseName: longhorn
+      values: |
+        persistence:
+          defaultClass: true
+          defaultClassReplicaCount: 3
+        defaultSettings:
+          defaultDataPath: /var/lib/longhorn
+          replicaSoftAntiAffinity: true
+          storageOverProvisioningPercentage: 100
+          storageMinimalAvailablePercentage: 25
+          defaultReplicaCount: 3
+          defaultDataLocality: disabled
+          guaranteedEngineCPU: 0.25
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          annotations:
+            traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+            traefik.ingress.kubernetes.io/router.tls: "true"
+            cert-manager.io/cluster-issuer: letsencrypt-prod
+          hosts:
+            - host: longhorn.local
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: longhorn-tls
+              hosts:
+                - longhorn.local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: longhorn-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+

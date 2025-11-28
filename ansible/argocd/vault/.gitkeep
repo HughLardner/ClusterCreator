@@ -1,0 +1,10 @@
+# Ansible Vault files go here
+# To create a vault file:
+#   ansible-vault create ansible/argocd/vault/main.yaml
+#
+# To edit:
+#   ansible-vault edit ansible/argocd/vault/main.yaml
+#
+# To view:
+#   ansible-vault view ansible/argocd/vault/main.yaml
+
