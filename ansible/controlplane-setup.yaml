@@ -19,7 +19,7 @@
   gather_facts: false
   any_errors_fatal: true
   vars:
-    cluster_config: "{{ lookup('file', 'tmp/{{ cluster_name }}/cluster_config.json') | from_json }}"
+    cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
   tasks:
     - name: Deploy kubeadm config file
       ansible.builtin.template:
@@ -165,6 +165,8 @@
         delay: 5
         state: started
         port: 6443 # Adjust if a different port or service check is needed
+      delegate_to: localhost
+      connection: local
       when: not kube_config_exists.stat.exists and
         ((kubernetes_medium_version.split('.')[0] | int == 1 and kubernetes_medium_version.split('.')[1] | int >= 29) or
         (kubernetes_medium_version.split('.')[0] | int > 1))

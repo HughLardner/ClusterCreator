@@ -12,7 +12,7 @@
       register: log_files
     - name: Check firstboot log files for failures to ensure all packages were installed correctly (excluding specific patterns)
       shell: |
-        grep -iE 'Error|Fatal' {{ item.path }} | grep -vE 'mysql/error.log|errors = false|liberror|No error reported|Failed to open terminal.debconf|errorcode.md|libgpg-error'
+        grep -iE 'Error|Fatal' "{{ item.path }}" | grep -vE 'mysql/error.log|errors = false|liberror|No error reported|Failed to open terminal.debconf|errorcode.md|libgpg-error'
       # ADD EXCLUSIONS HERE^
       register: grep_output
       failed_when: grep_output.rc == 0
@@ -27,15 +27,14 @@
 - name: Prepare nodes
   hosts: all
   gather_facts: true # needs to know OS type
-  become: true  # This ensures all tasks are run with elevated privileges
+  become: true # This ensures all tasks are run with elevated privileges
   vars:
-    cluster_config: "{{ lookup('file', 'tmp/{{ cluster_name }}/cluster_config.json') | from_json }}"
+    cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
   tasks:
-
     - name: Add IPv6 forwarding line to sysctl.d file (if IPv6 is enabled)
       ansible.builtin.lineinfile:
         path: /etc/sysctl.d/k8s_sysctl.conf
-        line: 'net.ipv6.conf.all.forwarding        = 1'
+        line: "net.ipv6.conf.all.forwarding        = 1"
         state: present
       when: cluster_config.networking.ipv6.enabled and cluster_config.networking.ipv6.dual_stack
     - name: Reload sysctl to apply changes (if IPv6 is enabled)

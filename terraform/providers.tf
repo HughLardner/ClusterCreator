@@ -8,10 +8,10 @@ terraform {
       source  = "bpg/proxmox"
       version = "0.73.1"
     }
-#     unifi = {
-#       source  = "paultyng/unifi"
-#       version = "0.41.0"
-#     }
+    unifi = {
+      source  = "paultyng/unifi"
+      version = "0.41.0"
+    }
   }
 
 #   backend "s3" {
@@ -49,12 +49,12 @@ terraform {
 #   s3_use_path_style           = true
 # }
 
-# provider "unifi" {
-#   username       = var.unifi_username
-#   password       = var.unifi_password
-#   api_url        = local.unifi_api_url
-#   allow_insecure = true
-# }
+provider "unifi" {
+  username       = var.unifi_username
+  password       = var.unifi_password
+  api_url        = local.unifi_api_url
+  allow_insecure = true
+}
 
 provider "proxmox" {
   endpoint   = "https://${local.proxmox_host}:8006/api2/json"

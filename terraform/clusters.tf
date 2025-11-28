@@ -6,7 +6,7 @@ variable "clusters" {
     cluster_id               : number                                                     # Required. Acts as the vm_id and vlan prefix. This plus the vm start ip should always be over 100 because of how proxmox likes its vmids.
     kubeconfig_file_name     : string                                                     # Required. Name of the local kubeconfig file to be created. Assumed this will be in $HOME/.kube/
     start_on_proxmox_boot    : optional(bool, true)                                       # Optional. Whether or not to start the cluster's vms on proxmox boot
-    max_pods_per_node        : optional(number, 512)                                      # Optional. Max pods per node. This should be a function of the quantity of IPs in you pod_cidr and number of nodes.
+    max_pods_per_node        : optional(number, 512)                                      # Optional. Max pods per node. This should be a function of the quantity of IPs in your pod_cidr and number of nodes.
     reboot_after_update      : optional(bool, false)                                      # Optional. Whether or not to reboot the nodes during terraform apply.
     use_pve_ha               : optional(bool, false)                                      # Optional. Whether to setup PVE High Availability for the VMs.
     ssh                      : object({
@@ -19,11 +19,11 @@ variable "clusters" {
       bridge                 : optional(string, "vmbr0")                                  # Optional. Name of the proxmox bridge to use for VM's network interface
       dns_search_domain      : optional(string, "lan")                                    # Optional. Search domain for DNS resolution
       assign_vlan            : optional(bool, false)                                      # Optional. Whether or not to assign a vlan to the network interfaces of the VMs.
-      vlan_id                : optional(number, null)                                     # Optional. The vlan id to assign to the network interfaces of the VMs. Defaults to <cluster_id>00 (e.e. 100, 200, 300, etc.)
+      vlan_id                : optional(number, null)                                     # Optional. The vlan id to assign to the network interfaces of the VMs. Defaults to <cluster_id>00 (e.g. 100, 200, 300, etc.)
       vlan_name              : optional(string, null)                                     # Optional. The name of the VLAN in Unifi. Defaults to the cluster name in all caps.
       ipv4                   : object({
-        subnet_prefix        : optional(string, "10.0.0")                                 # Optional. First three octets of the host IPv4 network's subnet (assuming its a /24)
-        gateway              : optional(string, "10.0.0.1")                               # Optional. Gateway for vm hosts
+        subnet_prefix        : optional(string, "192.168.10")                                 # Optional. First three octets of the host IPv4 network's subnet (assuming its a /24)
+        gateway              : optional(string, "192.168.10.1")                               # Optional. Gateway for vm hosts
         pod_cidr             : optional(string, "10.42.0.0/16")                           # Optional. Cidr range for pod networking internal to cluster. Shouldn't overlap with ipv4 lan network. These must differ cluster to cluster if using clustermesh.
         svc_cidr             : optional(string, "10.43.0.0/16")                           # Optional. Cidr range for service networking internal to cluster. Shouldn't overlap with ipv4 lan network.
         dns1                 : optional(string, "1.1.1.1")                                # Optional. Primary dns server for vm hosts
@@ -41,7 +41,7 @@ variable "clusters" {
         dns1                 : optional(string, "2607:fa18::1")                           # Optional. Primary dns server for vm hosts
         dns2                 : optional(string, "2607:fa18::2")                           # Optional. Secondary dns server for vm hosts
         management_cidrs     : optional(string, "")                                       # Optional. Proxmox list of ipv6 IPs or cidrs that you want to be able to reach the K8s api and ssh into the hosts. Only used if use_pve_firewall is true.
-        lb_cidrs             : optional(string, "")                                       # Optional. IPv6 cidrs to use for MetalLB. Required if IPv6 is enabled.
+        lb_cidrs             : optional(string, "")                                       # Optional. IPv6 cidrs to use for MetalLB. Should be provided if IPv6 is enabled.
       })
       kube_vip               : object({
         kube_vip_version     : optional(string, "0.8.4")                                  # Optional. Kube-vip version to use. Needs to be their ghcr.io docker image version
@@ -53,7 +53,7 @@ variable "clusters" {
     })
     node_classes             : map(object({
       count                  : number                                                     # Required. Number of VMs to create for this node class.
-      pve_nodes              : optional(list(string),["Citadel","Acropolis","Parthenon"]) # Optional. Nodes that this class is allowed to run on. They will be cycled through and will repeat if count > length(pve_nodes).
+      pve_nodes              : optional(list(string),["proxmox01"]) # Optional. Nodes that this class is allowed to run on. They will be cycled through and will repeat if count > length(pve_nodes). Default includes only proxmox01 - update if you have additional nodes.
       machine                : optional(string, "q35")                                    # Optional. Default to "q35". Use i400fx for partial gpu pass-through.
       cpu_type               : optional(string, "x86-64-v3")                              # Optional. Default to x86-64-v3. 'host' gives the best performance and is needed for full gpu pass-through, but it can't live migrate. https://www.yinfor.com/2023/06/how-i-choose-vm-cpu-type-in-proxmox-ve.html
       cores                  : optional(number, 2)                                        # Optional. Number of cores to use.
@@ -78,9 +78,62 @@ variable "clusters" {
     }))
   }))
   default = { # create your clusters here using the above object
+  "k3s" = {
+      cluster_name             = "k3s"
+      cluster_id               = 1
+      kubeconfig_file_name     = "k3s.yml"
+      start_on_proxmox_boot    = false
+      ssh = {
+        ssh_user               = "ubuntu"
+      }
+      networking = {
+        use_unifi              = false
+        assign_vlan            = false
+        vlan_id                = 10
+        ipv4 = {
+          subnet_prefix        = "192.168.10"
+          gateway              = "192.168.10.1"
+          pod_cidr             = "10.44.0.0/16"
+          svc_cidr             = "10.45.0.0/16"
+          management_cidrs     = "192.168.10.10"
+          lb_cidrs             = "192.168.10.150/28,192.168.10.160/28,192.168.10.170/28,192.168.10.180/28,192.168.10.190/28"
+        }
+        ipv6 = {}
+        kube_vip = {
+          vip                  = "192.168.10.100"
+          vip_hostname         = "k3s-api-server"
+        }
+      }
+      node_classes = {
+        controlplane = {
+          count      = 1
+          cores      = 2
+          memory     = 6144
+          disks      = [
+            { datastore = "local-lvm", size = 50 }
+          ]
+          start_ip   = 20
+          labels = [
+            "nodeclass=controlplane"
+          ]
+        }
+        general = {
+          count      = 2
+          cores      = 2
+          memory     = 4096
+          disks      = [
+            { datastore = "local-lvm", size = 50 }
+          ]
+          start_ip   = 40
+          labels = [
+            "nodeclass=general"
+          ]
+        }
+      }
+    }
     "alpha" = {
       cluster_name             = "alpha"
-      cluster_id               = 1
+      cluster_id               = 2
       kubeconfig_file_name     = "alpha.yml"
       start_on_proxmox_boot    = false
       ssh = {
@@ -88,24 +141,24 @@ variable "clusters" {
       }
       networking = {
         ipv4 = {
-          subnet_prefix        = "10.0.1"
-          gateway              = "10.0.1.1"
-          management_cidrs     = "10.0.0.0/30,10.0.60.2,10.0.50.5,10.0.50.6"
-          lb_cidrs             = "10.0.1.200/29,10.0.1.208/28,10.0.1.224/28,10.0.1.240/29,10.0.1.248/30,10.0.1.252/31"
+          subnet_prefix        = "192.168.100"
+          gateway              = "192.168.100.1"
+          management_cidrs     = "192.168.100.0/30,192.168.100.60,192.168.100.50,192.168.100.51"
+          lb_cidrs             = "192.168.100.200/29,192.168.100.208/28,192.168.100.224/28,192.168.100.240/29,192.168.100.248/30,192.168.100.252/31"
         }
         ipv6 = {}
         kube_vip = {
-          vip                  = "10.0.1.100"
+          vip                  = "192.168.100.100"
           vip_hostname         = "alpha-api-server"
         }
       }
       node_classes = {
         controlplane = {
           count      = 1
-          cores      = 16
-          memory     = 16384
+          cores      = 4 #16
+          memory     = 4096 #16384
           disks      = [
-            { datastore = "local-btrfs", size = 100 }
+            { datastore = "local-lvm", size = 100 }
           ]
           start_ip   = 110
           labels = [
@@ -116,7 +169,7 @@ variable "clusters" {
     }
     "beta" = {
       cluster_name             = "beta"
-      cluster_id               = 2
+      cluster_id               = 3
       kubeconfig_file_name     = "beta.yml"
       start_on_proxmox_boot    = false
       ssh = {
@@ -124,14 +177,14 @@ variable "clusters" {
       }
       networking = {
         ipv4 = {
-          subnet_prefix        = "10.0.2"
-          gateway              = "10.0.2.1"
-          management_cidrs     = "10.0.0.0/30,10.0.60.2,10.0.50.5,10.0.50.6"
-          lb_cidrs             = "10.0.2.200/29,10.0.2.208/28,10.0.2.224/28,10.0.2.240/29,10.0.2.248/30,10.0.2.252/31"
+          subnet_prefix        = "192.168.100"
+          gateway              = "192.168.100.1"
+          management_cidrs     = "192.168.100.0/30,192.168.100.60,192.168.100.50,192.168.100.51"
+          lb_cidrs             = "192.168.100.200/29,192.168.100.208/28,192.168.100.224/28,192.168.100.240/29,192.168.100.248/30,192.168.100.252/31"
         }
         ipv6 = {}
         kube_vip = {
-          vip                  = "10.0.2.100"
+          vip                  = "192.168.100.101"
           vip_hostname         = "beta-api-server"
         }
       }
@@ -141,19 +194,19 @@ variable "clusters" {
           cores      = 4
           memory     = 4096
           disks      = [
-            { datastore = "local-btrfs", size = 20 }
+            { datastore = "local-lvm", size = 20 }
           ]
-          start_ip   = 110
+          start_ip   = 111
           labels = [
             "nodeclass=controlplane"
           ]
         }
         general = {
           count      = 2
-          cores      = 8
+          cores      = 2 #8
           memory     = 4096
           disks      = [
-            { datastore = "local-btrfs", size = 20 }
+            { datastore = "local-lvm", size = 20 }
           ]
           start_ip   = 130
           labels = [
@@ -164,7 +217,7 @@ variable "clusters" {
     }
     "gamma" = {
       cluster_name             = "gamma"
-      cluster_id               = 3
+      cluster_id               = 4
       kubeconfig_file_name     = "gamma.yml"
       start_on_proxmox_boot    = false
       ssh = {
@@ -172,14 +225,14 @@ variable "clusters" {
       }
       networking = {
         ipv4 = {
-          subnet_prefix        = "10.0.3"
-          gateway              = "10.0.3.1"
-          management_cidrs     = "10.0.0.0/30,10.0.60.2,10.0.50.5,10.0.50.6"
-          lb_cidrs             = "10.0.3.200/29,10.0.3.208/28,10.0.3.224/28,10.0.3.240/29,10.0.3.248/30,10.0.3.252/31"
+          subnet_prefix        = "192.168.100"
+          gateway              = "192.168.100.1"
+          management_cidrs     = "192.168.100.0/30,192.168.100.60,192.168.100.50,192.168.100.51"
+          lb_cidrs             = "192.168.100.200/29,192.168.100.208/28,192.168.100.224/28,192.168.100.240/29,192.168.100.248/30,192.168.100.252/31"
         }
         ipv6 = {}
         kube_vip = {
-          vip                  = "10.0.3.100"
+          vip                  = "192.168.100.102"
           vip_hostname         = "gamma-api-server"
         }
       }
@@ -189,9 +242,9 @@ variable "clusters" {
           cores     = 4
           memory    = 4096
           disks     = [
-            { datastore = "local-btrfs", size = 20 }
+            { datastore = "local-lvm", size = 20 }
           ]
-          start_ip = 110
+          start_ip = 112
           labels   = [
             "nodeclass=controlplane"
           ]
@@ -199,28 +252,28 @@ variable "clusters" {
         etcd = {
           count     = 3
           disks     = [
-            { datastore = "local-btrfs", size = 20 }
+            { datastore = "local-lvm", size = 20 }
           ]
           start_ip = 120
         }
         general = {
           count     = 5
-          cores     = 8
+          cores     = 4 #8
           memory    = 4096
           disks     = [
-            { datastore = "local-btrfs", size = 20 }
+            { datastore = "local-lvm", size = 20 }
           ]
-          start_ip = 130
+          start_ip = 140
           labels   = [
             "nodeclass=general"
           ]
         }
         gpu = {
           count      = 2
-          pve_nodes  = [ "Acropolis", "Parthenon" ]
+          pve_nodes  = [ "proxmox01" ]  # Updated: Acropolis and Parthenon don't exist in Proxmox cluster
           cpu_type   = "host"
           disks      = [
-            { datastore = "local-btrfs", size = 20 }
+            { datastore = "local-lvm", size = 20 }
           ]
           start_ip   = 190
           labels = [
@@ -235,5 +288,6 @@ variable "clusters" {
         }
       }
     }
+    
   }
 }

@@ -6,29 +6,44 @@
   vars:
     enc_key_path: /etc/kubernetes/enc/enc.key
     enc_file_path: /etc/kubernetes/enc/enc.yaml
-    cluster_config: "{{ lookup('file', 'tmp/{{ cluster_name }}/cluster_config.json') | from_json }}"
+    cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
   tasks:
     - name: Check if the encryption key file exists on each node
       ansible.builtin.stat:
         path: "{{ enc_key_path }}"
       register: enc_key_stat
 
+    - name: Initialize key_source_node
+      set_fact:
+        key_source_node: ""
+
+    - name: Check if any node has the encryption key
+      set_fact:
+        has_existing_key: "{{ groups['controlplane'] | map('extract', hostvars, 'enc_key_stat') | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | list | length > 0 }}"
+      run_once: true
+
     - name: Find the first node with the encryption key
       set_fact:
         key_source_node: "{{ item }}"
-      when: hostvars[item].enc_key_stat.stat.exists | default(false)
+      when:
+        - has_existing_key | default(false)
+        - hostvars[item].enc_key_stat.stat.exists | default(false)
+        - key_source_node == ""
       loop: "{{ groups['controlplane'] }}"
       loop_control:
         label: "{{ item }}"
       run_once: true
+      failed_when: false
 
     - name: Load the existing encryption key from the source node
       ansible.builtin.slurp:
         src: "{{ enc_key_path }}"
       register: slurped_key
-      when: key_source_node is defined
-      delegate_to: "{{ key_source_node }}"
+      delegate_to: "{{ key_source_node if (has_existing_key | default(false)) and (key_source_node != '') else inventory_hostname }}"
       run_once: true
+      when:
+        - has_existing_key | default(false)
+        - key_source_node != ""
 
     - name: Set encryption key fact from existing key
       set_fact:
@@ -131,4 +146,3 @@
       environment:
         KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/{{ cluster_config.kubeconfig_file_name }}"
       when: config_check.rc != 0
-

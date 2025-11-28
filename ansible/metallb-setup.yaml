@@ -4,7 +4,7 @@
   tags:
     - metallb_basic_install
   vars:
-    cluster_config: "{{ lookup('file', 'tmp/{{ cluster_name }}/cluster_config.json') | from_json }}"
+    cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
   tasks:
 
     - name: Generate MetalLB configuration files
@@ -53,8 +53,12 @@
         cmd: kubectl apply -f /tmp/metallb_configs.yaml
       args:
         executable: /bin/bash
+      register: metallb_apply_result
+      failed_when: >
+        metallb_apply_result.rc != 0 and
+        ('overlaps with already defined CIDR' not in (metallb_apply_result.stderr | default('')))
       tags:
-          - metallb_configs_apply
+        - metallb_configs_apply
 
     - name: Set the count of worker nodes
       set_fact:

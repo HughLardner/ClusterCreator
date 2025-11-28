@@ -4,7 +4,7 @@
   gather_facts: false
   any_errors_fatal: true
   vars:
-    cluster_config: "{{ lookup('file', 'tmp/{{ cluster_name }}/cluster_config.json') | from_json }}"
+    cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
     control_plane_host: null
   tasks:
     # finding an controlplane node is necessary because we can't use controlplane[0] because it could be a new node.
@@ -77,12 +77,11 @@
     - name: Join the nodes not in the cluster
       any_errors_fatal: false # if it fails, we can join it later
       block:
-
         - name: Upgrade all packages to the latest version on controlplane nodes to be added to cluster
           become: true
           ansible.builtin.apt:
-            upgrade: 'dist'  # Use 'dist' for distribution upgrade, or 'full' for full upgrade
-            force_apt_get: yes  # Optionally force using apt-get instead of aptitude
+            upgrade: "dist" # Use 'dist' for distribution upgrade, or 'full' for full upgrade
+            force_apt_get: yes # Optionally force using apt-get instead of aptitude
             update_cache: yes
             autoremove: yes
             autoclean: yes
@@ -113,7 +112,7 @@
 
         - name: Read controlplane join command
           ansible.builtin.set_fact:
-            join_command_local: "{{ lookup('file', 'tmp/{{ cluster_name }}/control_plane_join_command.sh') }}"
+            join_command_local: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/control_plane_join_command.sh') }}"
 
         - name: Join controlplane nodes to cluster
           ansible.builtin.shell:

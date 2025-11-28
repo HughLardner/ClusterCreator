@@ -213,6 +213,7 @@ display_usage() {
     echo "  upgrade-k8s          Upgrades the control-plane api to the version specified in the environment settings"
     echo "  vmctl                Controls VM state, including power controls and backups"
     echo "  run-command          Runs a bash command on a host or an Ansible host group"
+    echo "  run-playbook         Runs a single Ansible playbook (useful for troubleshooting)"
     echo "  toggle-providers     Toggles the S3 (Minio) and Unifi providers"
     echo ""
     echo "Use the -h/--help flag following a command for more descriptive help output."
@@ -313,7 +314,8 @@ if [[ "$COMMAND" == "template" || \
       "$COMMAND" == "upgrade-addons" || \
       "$COMMAND" == "upgrade-k8s" || \
       "$COMMAND" == "vmctl" || \
-      "$COMMAND" == "run-command" \
+      "$COMMAND" == "run-command" || \
+      "$COMMAND" == "run-playbook" \
     ]]; then
     check_required_vars "${required_vars[@]}"
     print_env_vars "${required_vars[@]}"
@@ -371,6 +373,9 @@ case "$COMMAND" in
         ;;
     run-command)
         ( "$REPO_PATH/scripts/run_command.sh" "$@" )
+        ;;
+    run-playbook)
+        ( "$REPO_PATH/scripts/run-playbook.sh" "$@" )
         ;;
     toggle-providers)
         ( "$REPO_PATH/scripts/toggle_providers.sh" "$@" )
