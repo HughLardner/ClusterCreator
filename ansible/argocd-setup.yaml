@@ -359,17 +359,6 @@
       tags:
         - argocd_bootstrap
 
-    - name: Wait for services App of Apps to be synced
-      ansible.builtin.shell:
-        cmd: >
-          kubectl wait --for=condition=Healthy application/services
-          -n {{ argocd_namespace }} --timeout=300s || true
-      args:
-        executable: /bin/bash
-      tags:
-        - argocd_bootstrap
-        - argocd_wait
-
     - name: Display ArgoCD access information
       ansible.builtin.debug:
         msg:
