@@ -18,9 +18,10 @@ spec:
         releaseName: traefik
     - repoURL: https://github.com/HughLardner/ClusterCreator
       targetRevision: main
+      path: kubernetes/services
       helm:
         valueFiles:
-          - kubernetes/services/traefik/values.yaml
+          - traefik/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik-system

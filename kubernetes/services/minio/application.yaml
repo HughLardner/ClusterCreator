@@ -18,9 +18,10 @@ spec:
         releaseName: minio
     - repoURL: https://github.com/HughLardner/ClusterCreator
       targetRevision: main
+      path: kubernetes/services
       helm:
         valueFiles:
-          - kubernetes/services/minio/values.yaml
+          - minio/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: minio

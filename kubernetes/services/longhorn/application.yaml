@@ -18,9 +18,10 @@ spec:
         releaseName: longhorn
     - repoURL: https://github.com/HughLardner/ClusterCreator
       targetRevision: main
+      path: kubernetes/services
       helm:
         valueFiles:
-          - kubernetes/services/longhorn/values.yaml
+          - longhorn/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: longhorn-system
