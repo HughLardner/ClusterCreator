@@ -3,7 +3,7 @@
 # https://github.com/traefik/traefik-helm-chart
 
 deployment:
-  replicas: 1  # ACME requires single replica for certificate storage
+  replicas: 1 # ACME requires single replica for certificate storage
 
 # Use hostNetwork to allow Traefik to bind to ports 80/443 directly
 # This is required when using NET_BIND_SERVICE capability may not work in all environments
@@ -53,13 +53,19 @@ additionalArguments:
   - "--certificatesresolvers.letsencrypt.acme.email=admin@local"
   - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
   - "--providers.kubernetesingress=true"
-  - "--providers.kubernetesingress.publishedservice.enabled=true"
   - "--providers.kubernetescrd=true"
   - "--api.dashboard=true"
   - "--api.insecure=false"
   - "--log.level=INFO"
   - "--accesslog=true"
   - "--metrics.prometheus=true"
+
+# Configure Traefik to publish service status to Ingress resources
+# This is required for Argo CD to recognize Ingress resources as Healthy
+providers:
+  kubernetesIngress:
+    publishedService:
+      enabled: true
 
 podAnnotations:
   prometheus.io/scrape: "true"
@@ -80,4 +86,3 @@ securityContext:
       - NET_BIND_SERVICE
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
-
