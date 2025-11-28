@@ -330,10 +330,8 @@
             source:
               repoURL: {{ argocd_repo_url }}
               targetRevision: main
-              path: kubernetes/argocd/services
-              kustomize:
-                commonAnnotations:
-                  argocd.argoproj.io/sync-wave: "0"
+              path: kubernetes/services
+              kustomize: {}
             destination:
               server: https://kubernetes.default.svc
               namespace: {{ argocd_namespace }}

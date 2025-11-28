@@ -10,14 +10,17 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://traefik.github.io/charts
-    targetRevision: 27.0.0
-    chart: traefik
-    helm:
-      releaseName: traefik
-      valueFiles:
-        - kubernetes/services/traefik/values.yaml
+  sources:
+    - repoURL: https://traefik.github.io/charts
+      targetRevision: 27.0.0
+      chart: traefik
+      helm:
+        releaseName: traefik
+    - repoURL: https://github.com/HughLardner/ClusterCreator
+      targetRevision: main
+      helm:
+        valueFiles:
+          - kubernetes/services/traefik/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik-system

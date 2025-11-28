@@ -10,14 +10,17 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://charts.min.io/
-    targetRevision: 5.0.0
-    chart: minio
-    helm:
-      releaseName: minio
-      valueFiles:
-        - kubernetes/services/minio/values.yaml
+  sources:
+    - repoURL: https://charts.min.io/
+      targetRevision: 5.0.0
+      chart: minio
+      helm:
+        releaseName: minio
+    - repoURL: https://github.com/HughLardner/ClusterCreator
+      targetRevision: main
+      helm:
+        valueFiles:
+          - kubernetes/services/minio/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: minio

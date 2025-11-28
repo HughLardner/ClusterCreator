@@ -10,14 +10,17 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://grafana.github.io/helm-charts
-    targetRevision: 7.3.7
-    chart: grafana
-    helm:
-      releaseName: grafana
-      valueFiles:
-        - kubernetes/services/grafana/values.yaml
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      targetRevision: 7.3.7
+      chart: grafana
+      helm:
+        releaseName: grafana
+    - repoURL: https://github.com/HughLardner/ClusterCreator
+      targetRevision: main
+      helm:
+        valueFiles:
+          - kubernetes/services/grafana/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

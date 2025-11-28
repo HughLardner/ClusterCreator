@@ -90,6 +90,11 @@ export -f cleanup_files
 run_playbooks() {
   local ansible_opts="-i tmp/${CLUSTER_NAME}/ansible-hosts.txt -u ${VM_USERNAME} --private-key ${HOME}/.ssh/${NON_PASSWORD_PROTECTED_SSH_KEY}"
 
+  # Add vault password file if set
+  if [ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ] && [ -f "${ANSIBLE_VAULT_PASSWORD_FILE}" ]; then
+    ansible_opts="$ansible_opts --vault-password-file ${ANSIBLE_VAULT_PASSWORD_FILE}"
+  fi
+
   # Default extra vars
   local default_extra_vars="\
     -e cluster_name=${CLUSTER_NAME} \
@@ -126,8 +131,15 @@ run_playbooks() {
 
   for playbook in "${playbooks[@]}"; do
     echo -e "${BLUE}Running playbook: $playbook${ENDCOLOR}"
+    # Check if playbook requires vault password and prompt if not set
+    local vault_opts=""
+    if [[ "$playbook" == *"argocd"* ]] || [[ "$playbook" == *"sealed-secrets"* ]] || [[ "$playbook" == *"create-sealed-secrets"* ]]; then
+      if [ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ] || [ ! -f "${ANSIBLE_VAULT_PASSWORD_FILE}" ]; then
+        vault_opts="--ask-vault-pass"
+      fi
+    fi
     # Run ansible-playbook with options, extra vars, and playbook path
-    ansible-playbook $ansible_opts $default_extra_vars $extra_vars "$playbook"
+    ansible-playbook $ansible_opts $vault_opts $default_extra_vars $extra_vars "$playbook"
     if [ $? -ne 0 ]; then
       echo -e "${RED}Error: Playbook $playbook failed. Exiting.${ENDCOLOR}"
       echo -e "${BLUE}If you're having trouble diagnosing the issue, please submit an issue on GitHub!${ENDCOLOR}"

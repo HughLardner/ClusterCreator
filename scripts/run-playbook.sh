@@ -76,6 +76,11 @@ fi
 # Set up ansible options
 ANSIBLE_OPTS="-i ${INVENTORY_FILE} -u ${VM_USERNAME} --private-key ${HOME}/.ssh/${NON_PASSWORD_PROTECTED_SSH_KEY}"
 
+# Add vault password file if set
+if [ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ] && [ -f "${ANSIBLE_VAULT_PASSWORD_FILE}" ]; then
+  ANSIBLE_OPTS="$ANSIBLE_OPTS --vault-password-file ${ANSIBLE_VAULT_PASSWORD_FILE}"
+fi
+
 # Set up default extra vars (same as in run_playbooks function)
 DEFAULT_EXTRA_VARS="\
   -e cluster_name=${CLUSTER_NAME} \
@@ -99,10 +104,18 @@ ansible-galaxy collection install kubernetes.core > /dev/null 2>&1
 # Change to ansible directory
 cd "${REPO_PATH}/ansible" || exit 1
 
+# Check if playbook requires vault password and prompt if not set
+VAULT_OPTS=""
+if [[ "$PLAYBOOK_NAME" == *"argocd"* ]] || [[ "$PLAYBOOK_NAME" == *"sealed-secrets"* ]] || [[ "$PLAYBOOK_NAME" == *"create-sealed-secrets"* ]]; then
+  if [ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ] || [ ! -f "${ANSIBLE_VAULT_PASSWORD_FILE}" ]; then
+    VAULT_OPTS="--ask-vault-pass"
+  fi
+fi
+
 # Run the playbook
 echo "Running playbook: ${PLAYBOOK_NAME}"
 echo "Additional args: $@"
 echo ""
 
-ansible-playbook $ANSIBLE_OPTS $DEFAULT_EXTRA_VARS "$@" "$PLAYBOOK_NAME"
+ansible-playbook $ANSIBLE_OPTS $VAULT_OPTS $DEFAULT_EXTRA_VARS "$@" "$PLAYBOOK_NAME"
 

@@ -10,14 +10,17 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://charts.longhorn.io
-    targetRevision: 1.6.1
-    chart: longhorn
-    helm:
-      releaseName: longhorn
-      valueFiles:
-        - kubernetes/services/longhorn/values.yaml
+  sources:
+    - repoURL: https://charts.longhorn.io
+      targetRevision: 1.6.1
+      chart: longhorn
+      helm:
+        releaseName: longhorn
+    - repoURL: https://github.com/HughLardner/ClusterCreator
+      targetRevision: main
+      helm:
+        valueFiles:
+          - kubernetes/services/longhorn/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: longhorn-system

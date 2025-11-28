@@ -12,6 +12,7 @@ spec:
     repoURL: https://github.com/HughLardner/ClusterCreator
     targetRevision: main
     path: kubernetes/services
+    kustomize: {}
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

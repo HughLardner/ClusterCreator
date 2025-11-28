@@ -13,6 +13,8 @@ usage() {
   echo " * StorageClass configuration."
   echo " * Node labeling and tainting."
   echo " * Node preparation and joining."
+  echo " * Sealed Secrets controller installation."
+  echo " * Argo CD installation and bootstrap services."
 }
 
 # Parse command-line arguments
@@ -63,6 +65,8 @@ playbooks=(
   "metrics-server-setup.yaml"
   "metallb-setup.yaml"
   "label-and-taint-nodes.yaml"
+  "sealed-secrets-setup.yaml"
+  "argocd-setup.yaml"
   "ending-output.yaml"
 )
 run_playbooks "${playbooks[@]}"
