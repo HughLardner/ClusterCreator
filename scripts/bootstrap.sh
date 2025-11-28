@@ -71,7 +71,8 @@ playbooks=(
 )
 run_playbooks "${playbooks[@]}"
 
-echo -e "${GREEN}Remember to remove the annotation 'storageclass.kubernetes.io/is-default-class: \"true\"' from the local-path storageclass if you choose to use something else like Longhorn, Rook, OpenEBS, etc.${ENDCOLOR}"
+echo -e "${GREEN}Note: The default annotation has been automatically removed from the local-path storageclass.${ENDCOLOR}"
+echo -e "${GREEN}Longhorn will be set as the default storage class once it's deployed via Argo CD.${ENDCOLOR}"
 echo -e "${GREEN}Source your bash or zsh profile and run 'kubectx ${CLUSTER_NAME}' to access the cluster from your local machine.${ENDCOLOR}"
 
 # ---------------------------- Script End ----------------------------

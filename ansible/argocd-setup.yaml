@@ -53,6 +53,29 @@
       tags:
         - always
 
+    - name: Debug - Check if argocd_admin_password is loaded
+      ansible.builtin.debug:
+        msg:
+          - "argocd_admin_password is defined: {{ argocd_admin_password is defined }}"
+          - "argocd_admin_password length: {{ argocd_admin_password | default('NOT_SET') | length }}"
+          - "argocd_admin_password value (first 3 chars): {{ argocd_admin_password | default('NOT_SET') | string | truncate(3, True, '') }}"
+      when: argocd_vault_file.stat.exists
+      tags:
+        - always
+        - debug
+
+    - name: Display password status
+      ansible.builtin.debug:
+        msg:
+          - "Vault file exists: {{ argocd_vault_file.stat.exists }}"
+          - "argocd_admin_password is defined: {{ argocd_admin_password is defined }}"
+          - "argocd_admin_password length: {{ argocd_admin_password | default('NOT_SET') | length }}"
+          - "Note: argocd_admin_password is optional. If not set, Argo CD will use auto-generated password."
+      when: argocd_vault_file.stat.exists
+      tags:
+        - always
+        - debug
+
     - name: Add ArgoCD Helm repository
       ansible.builtin.shell:
         cmd: helm repo add argo https://argoproj.github.io/argo-helm
@@ -116,7 +139,42 @@
       tags:
         - argocd_cleanup
 
-    - name: Install ArgoCD (with version)
+    - name: Generate bcrypt hash of admin password
+      ansible.builtin.shell:
+        cmd: >
+          htpasswd -nbBC 10 "" {{ argocd_admin_password | quote }} | tr -d ':\n' | sed 's/$2y/$2a/'
+      args:
+        executable: /bin/bash
+      register: argocd_admin_password_hash
+      changed_when: false
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0
+      tags:
+        - argocd_install
+
+    - name: Install ArgoCD (with version and custom password)
+      ansible.builtin.shell:
+        cmd: >
+          helm upgrade --install argocd argo/argo-cd
+          --namespace {{ argocd_namespace }}
+          --create-namespace
+          --version {{ argocd_version }}
+          --set server.service.type=LoadBalancer
+          --set configs.secret.argocdServerAdminPassword={{ argocd_admin_password_hash.stdout | quote }}
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_version is defined and
+        argocd_version | length > 0 and
+        argocd_version | trim | length > 0 and
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined
+      tags:
+        - argocd_install
+
+    - name: Install ArgoCD (with version, no custom password)
       ansible.builtin.shell:
         cmd: >
           helm upgrade --install argocd argo/argo-cd
@@ -129,9 +187,32 @@
       when: >
         argocd_version is defined and
         argocd_version | length > 0 and
-        argocd_version | trim | length > 0
+        argocd_version | trim | length > 0 and
+        (argocd_admin_password is not defined or argocd_admin_password | length == 0)
+      tags:
+        - argocd_install
 
-    - name: Install ArgoCD (latest version)
+    - name: Install ArgoCD (latest version with custom password)
+      ansible.builtin.shell:
+        cmd: >
+          helm upgrade --install argocd argo/argo-cd
+          --namespace {{ argocd_namespace }}
+          --create-namespace
+          --set server.service.type=LoadBalancer
+          --set configs.secret.argocdServerAdminPassword={{ argocd_admin_password_hash.stdout | quote }}
+      args:
+        executable: /bin/bash
+      when: >
+        (argocd_version is not defined or
+        argocd_version | length == 0 or
+        argocd_version | trim | length == 0) and
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined
+      tags:
+        - argocd_install
+
+    - name: Install ArgoCD (latest version, no custom password)
       ansible.builtin.shell:
         cmd: >
           helm upgrade --install argocd argo/argo-cd
@@ -141,9 +222,12 @@
       args:
         executable: /bin/bash
       when: >
-        argocd_version is not defined or
+        (argocd_version is not defined or
         argocd_version | length == 0 or
-        argocd_version | trim | length == 0
+        argocd_version | trim | length == 0) and
+        (argocd_admin_password is not defined or argocd_admin_password | length == 0)
+      tags:
+        - argocd_install
 
     - name: Wait for ArgoCD server deployment to be ready
       ansible.builtin.shell:
@@ -152,6 +236,122 @@
         executable: /bin/bash
       tags:
         - argocd_wait
+
+    - name: Wait for argocd-initial-admin-secret to be created (when no custom password)
+      ansible.builtin.shell:
+        cmd: |
+          for i in {1..60}; do
+            if kubectl get secret argocd-initial-admin-secret -n {{ argocd_namespace }} &>/dev/null; then
+              echo "secret_exists"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "secret_not_found"
+      args:
+        executable: /bin/bash
+      register: initial_secret_wait
+      changed_when: false
+      when: >
+        argocd_admin_password is not defined or
+        argocd_admin_password | length == 0
+      tags:
+        - argocd_wait
+
+    - name: Wait for argocd-secret to exist before patching
+      ansible.builtin.shell:
+        cmd: |
+          for i in {1..30}; do
+            if kubectl get secret argocd-secret -n {{ argocd_namespace }} &>/dev/null; then
+              echo "secret_exists"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "secret_not_found"
+      args:
+        executable: /bin/bash
+      register: secret_wait_result
+      changed_when: false
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined
+      tags:
+        - argocd_install
+
+    - name: Set custom admin password post-installation (if provided)
+      ansible.builtin.shell:
+        cmd: |
+          kubectl -n {{ argocd_namespace }} patch secret argocd-secret \
+            -p "{\"stringData\": {
+              \"admin.password\": \"{{ argocd_admin_password_hash.stdout }}\",
+              \"admin.passwordMtime\": \"$(date +%FT%T%Z)\"
+            }}"
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined and
+        secret_wait_result.stdout == "secret_exists"
+      tags:
+        - argocd_install
+
+    - name: Verify password was set in secret
+      ansible.builtin.shell:
+        cmd: |
+          kubectl get secret argocd-secret -n {{ argocd_namespace }} -o jsonpath='{.data.admin\.password}' | base64 -d | head -c 20
+      args:
+        executable: /bin/bash
+      register: password_verification
+      changed_when: false
+      failed_when: false
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined and
+        secret_wait_result.stdout == "secret_exists"
+      tags:
+        - argocd_install
+
+    - name: Display password verification
+      ansible.builtin.debug:
+        msg:
+          - "Password hash in secret (first 20 chars): {{ password_verification.stdout | default('NOT_SET') }}"
+          - "Expected hash starts with: $2a$10$"
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined
+      tags:
+        - argocd_install
+
+    - name: Restart ArgoCD server to apply password change
+      ansible.builtin.shell:
+        cmd: kubectl rollout restart deployment/argocd-server -n {{ argocd_namespace }}
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined and
+        secret_wait_result.stdout == "secret_exists"
+      tags:
+        - argocd_install
+
+    - name: Wait for ArgoCD server to be ready after restart
+      ansible.builtin.shell:
+        cmd: kubectl rollout status deployment/argocd-server --namespace {{ argocd_namespace }} --timeout=300s
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined and
+        secret_wait_result.stdout == "secret_exists"
+      tags:
+        - argocd_install
 
     - name: Wait for ArgoCD repo server deployment to be ready
       ansible.builtin.shell:
@@ -214,17 +414,60 @@
       tags:
         - argocd_repo_config
 
-    - name: Display ArgoCD admin password
+    - name: Get ArgoCD admin password from initial secret (when no custom password)
       ansible.builtin.shell:
         cmd: >
           kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret
-          -o jsonpath="{.data.password}" | base64 -d
+          -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo ""
       args:
         executable: /bin/bash
-      register: argocd_admin_password
+      register: argocd_initial_password
       changed_when: false
+      failed_when: false
+      when: >
+        argocd_admin_password is not defined or
+        argocd_admin_password | length == 0
       tags:
         - argocd_info
+
+    - name: Get ArgoCD admin password from argocd-secret as fallback
+      ansible.builtin.shell:
+        cmd: >
+          kubectl -n {{ argocd_namespace }} get secret argocd-secret
+          -o jsonpath="{.data.admin\.password}" 2>/dev/null | base64 -d || echo ""
+      args:
+        executable: /bin/bash
+      register: argocd_secret_password
+      changed_when: false
+      failed_when: false
+      when: >
+        (argocd_admin_password is not defined or argocd_admin_password | length == 0) and
+        (argocd_initial_password.stdout is not defined or argocd_initial_password.stdout | length == 0)
+      tags:
+        - argocd_info
+
+    - name: Get ArgoCD admin password (from custom password, initial secret, or argocd-secret)
+      ansible.builtin.set_fact:
+        argocd_admin_password_display: >
+          {% if argocd_admin_password is defined and argocd_admin_password | length > 0 %}
+          {{ argocd_admin_password }}
+          {% elif argocd_initial_password.stdout is defined and argocd_initial_password.stdout | length > 0 %}
+          {{ argocd_initial_password.stdout }}
+          {% elif argocd_secret_password.stdout is defined and argocd_secret_password.stdout | length > 0 %}
+          (Password is set in argocd-secret - use: kubectl -n {{ argocd_namespace }} get secret argocd-secret -o jsonpath="{.data.admin\.password}" | base64 -d)
+          {% else %}
+          Password not available. Try: argocd admin initial-password -n {{ argocd_namespace }} or check secrets manually
+          {% endif %}
+      tags:
+        - argocd_info
+
+    - name: Set ArgoCD admin password fact for CLI usage
+      ansible.builtin.set_fact:
+        argocd_admin_password: "{{ argocd_admin_password_display }}"
+      when: argocd_admin_password_display is defined
+      tags:
+        - argocd_info
+        - argocd_status
 
     - name: Get ArgoCD server LoadBalancer IP
       ansible.builtin.shell:
@@ -357,13 +600,128 @@
       tags:
         - argocd_bootstrap
 
+    - name: Remove default annotation from local-path storageclass
+      ansible.builtin.shell:
+        cmd: kubectl annotate storageclass local-path storageclass.kubernetes.io/is-default-class- 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+      tags:
+        - argocd_bootstrap
+      when: argocd_bootstrap_enabled | default(true) | bool
+
+    - name: Check if ArgoCD CLI is available
+      ansible.builtin.command:
+        cmd: which argocd
+      register: argocd_cli_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - argocd_status
+
+    - name: Wait for ArgoCD server to be accessible
+      ansible.builtin.pause:
+        seconds: 10
+      when: >
+        argocd_cli_check.rc == 0 and
+        argocd_bootstrap_enabled | default(true) | bool
+      tags:
+        - argocd_status
+
+    - name: Set ArgoCD password for CLI login
+      ansible.builtin.set_fact:
+        argocd_cli_password: >
+          {% if argocd_admin_password_display.stdout is defined %}
+          {{ argocd_admin_password_display.stdout }}
+          {% else %}
+          {{ argocd_admin_password | default('') }}
+          {% endif %}
+      tags:
+        - argocd_status
+
+    - name: Login to ArgoCD using CLI
+      ansible.builtin.shell:
+        cmd: >
+          argocd login {{ argocd_server_ip.stdout | default('argocd-server.' + argocd_namespace + '.svc.cluster.local') }}
+          --insecure
+          --username admin
+          --password {{ argocd_cli_password | quote }}
+          --grpc-web
+      args:
+        executable: /bin/bash
+      register: argocd_login
+      changed_when: false
+      failed_when: false
+      when: >
+        argocd_cli_check.rc == 0 and
+        argocd_bootstrap_enabled | default(true) | bool and
+        argocd_cli_password is defined and
+        argocd_cli_password | length > 0
+      tags:
+        - argocd_status
+
+    - name: Get services application status
+      ansible.builtin.shell:
+        cmd: argocd app get services -o json
+      args:
+        executable: /bin/bash
+      register: services_app_status
+      changed_when: false
+      failed_when: false
+      when: >
+        argocd_cli_check.rc == 0 and
+        argocd_login.rc == 0 and
+        argocd_bootstrap_enabled | default(true) | bool
+      tags:
+        - argocd_status
+
+    - name: List all ArgoCD applications
+      ansible.builtin.shell:
+        cmd: argocd app list -o wide
+      args:
+        executable: /bin/bash
+      register: argocd_app_list
+      changed_when: false
+      failed_when: false
+      when: >
+        argocd_cli_check.rc == 0 and
+        argocd_login.rc == 0 and
+        argocd_bootstrap_enabled | default(true) | bool
+      tags:
+        - argocd_status
+
+    - name: Display ArgoCD application status
+      ansible.builtin.debug:
+        msg:
+          - "ArgoCD CLI Status Check:"
+          - "{{ argocd_app_list.stdout_lines | default(['ArgoCD CLI not available or login failed']) }}"
+      when: >
+        argocd_cli_check.rc == 0 and
+        argocd_login.rc == 0 and
+        argocd_bootstrap_enabled | default(true) | bool
+      tags:
+        - argocd_status
+
+    - name: Set password source message
+      ansible.builtin.set_fact:
+        argocd_password_note: >
+          {% if argocd_admin_password is defined and argocd_admin_password | length > 0 %}
+          Note: Using custom admin password from Ansible Vault
+          {% else %}
+          Note: Using auto-generated password from argocd-initial-admin-secret
+          {% endif %}
+      tags:
+        - argocd_info
+
     - name: Display ArgoCD access information
       ansible.builtin.debug:
         msg:
           - "ArgoCD has been installed successfully!"
           - "ArgoCD Server URL: https://{{ argocd_server_ip.stdout | default('Pending LoadBalancer IP') }}"
           - "Admin Username: admin"
-          - "Admin Password: {{ argocd_admin_password.stdout }}"
+          - "Admin Password: {{ argocd_admin_password_display }}"
+          - "{{ argocd_password_note }}"
           - "Repository '{{ argocd_repo_name }}' has been configured with access to {{ argocd_repo_url }}"
           - "Bootstrap applications (Longhorn, MinIO, Traefik, Grafana) are being deployed via App of Apps pattern"
       tags:

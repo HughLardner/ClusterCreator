@@ -23,10 +23,9 @@ ingress:
     traefik.ingress.kubernetes.io/router.tls: "true"
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: grafana.local
-      paths:
-        - path: /
-          pathType: Prefix
+    - grafana.local
+  path: /
+  pathType: Prefix
   tls:
     - secretName: grafana-tls
       hosts:

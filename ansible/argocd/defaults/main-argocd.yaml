@@ -7,9 +7,14 @@ argocd_repo_url: "https://github.com/HughLardner/ClusterCreator"
 argocd_repo_username: "Homelab-argocd"
 # argocd_repo_password: ""  # MUST be set via Ansible Vault or environment variable
 # To use Ansible Vault:
-#   1. Create vault file: Sealed Secrets
+#   1. Create vault file: ansible/argocd/vault/main.yaml
 #   2. Add: argocd_repo_password: "your-github-pat-token"
 #   3. Update playbook to include vault file
+# argocd_admin_password: ""  # Optional: Set custom Argo CD admin password via Ansible Vault
+# If not set, Argo CD will generate a random password stored in argocd-initial-admin-secret
+# To use Ansible Vault:
+#   1. Edit vault file: ansible-vault edit ansible/argocd/vault/main.yaml
+#   2. Add: argocd_admin_password: "your-secure-password"
 argocd_repo_type: "git" # Connection protocol: "HTTPS" for HTTPS connections, "git" for SSH connections, "helm" for Helm repos
 argocd_namespace: "argocd"
 argocd_repo_name: "clustercreator" # This will be used as the repository name in ArgoCD

@@ -23,11 +23,9 @@ ingress:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
     cert-manager.io/cluster-issuer: letsencrypt-prod
-  hosts:
-    - host: minio.local
-      paths:
-        - path: /
-          pathType: Prefix
+  host: minio.local
+  path: /
+  pathType: Prefix
   tls:
     - secretName: minio-tls
       hosts:
