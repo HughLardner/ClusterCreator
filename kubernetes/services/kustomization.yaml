@@ -7,4 +7,5 @@ resources:
   - longhorn/application.yaml
   - minio/application.yaml
   - grafana/application.yaml
+  - pihole/application.yaml
 

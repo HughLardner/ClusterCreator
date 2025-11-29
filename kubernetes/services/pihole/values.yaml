@@ -1,0 +1,63 @@
+---
+# Pi-hole Helm Chart Values
+# https://github.com/MoJo2600/pihole-kubernetes
+
+# Pi-hole environment variables
+# Admin password should be set via Kubernetes Secret or SealedSecret
+env:
+  TZ: "UTC"
+  WEBPASSWORD: "" # Set via secret or SealedSecret - leave empty to use auto-generated
+
+# DNS upstream servers
+dns:
+  upstream:
+    - "1.1.1.1"
+    - "1.0.0.1"
+
+# Web service configuration
+serviceWeb:
+  type: ClusterIP
+  annotations: {}
+
+# DNS service configuration
+# Pi-hole DNS needs to be accessible on port 53
+# Using NodePort to expose DNS service
+serviceDns:
+  type: NodePort
+  nodePort: 3053  # Custom port to avoid conflicts with host port 53
+
+# Ingress configuration for Traefik
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: pihole.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: pihole-tls
+      hosts:
+        - pihole.local
+
+# Persistent volume configuration
+persistentVolumeClaim:
+  enabled: true
+  storageClass: longhorn
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+
+# Resources
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
