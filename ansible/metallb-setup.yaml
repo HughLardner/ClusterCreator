@@ -60,6 +60,17 @@
       tags:
         - metallb_configs_apply
 
+    - name: Verify MetalLB IPAddressPool was created
+      ansible.builtin.command:
+        cmd: kubectl get ipaddresspool metallb-ipaddresspool -n metallb-system
+      args:
+        executable: /bin/bash
+      register: metallb_pool_check
+      changed_when: false
+      failed_when: metallb_pool_check.rc != 0
+      tags:
+        - metallb_configs_apply
+
     - name: Set the count of worker nodes
       set_fact:
         worker_node_count: >-
