@@ -28,8 +28,9 @@ serviceDns:
   port: 53
   annotations:
     metallb.universe.tf/address-pool: default
-  # Optional: Specify a specific IP from the MetalLB pool
-  # loadBalancerIP: "192.168.10.50"  # Uncomment and set desired IP
+  # Enforce a specific IP address for Pi-hole DNS
+  # This ensures Pi-hole always gets the same IP, making DNS configuration stable
+  loadBalancerIP: "192.168.10.150"
 
 # Ingress configuration for Traefik
 ingress:
