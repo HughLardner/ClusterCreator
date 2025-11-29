@@ -24,7 +24,8 @@ serviceWeb:
 # Using NodePort to expose DNS service
 serviceDns:
   type: NodePort
-  nodePort: 3053 # Custom port to avoid conflicts with host port 53
+  port: 53
+  nodePort: "3053"  # Custom port to avoid conflicts with host port 53 (must be string)
 
 # Ingress configuration for Traefik
 ingress:
