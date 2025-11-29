@@ -55,7 +55,7 @@ additionalArguments:
   - "--providers.kubernetesingress=true"
   - "--providers.kubernetescrd=true"
   - "--api.dashboard=true"
-  - "--api.insecure=false"
+  - "--api.insecure=true"
   - "--log.level=INFO"
   - "--accesslog=true"
   - "--metrics.prometheus=true"
