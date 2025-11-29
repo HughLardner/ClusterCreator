@@ -600,6 +600,19 @@
             name: grafana
             type: helm
             url: https://grafana.github.io/helm-charts
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: pihole-helm-repo
+            namespace: {{ argocd_namespace }}
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            name: pihole
+            type: helm
+            url: https://mojo2600.github.io/pihole-kubernetes/
           EOF
       args:
         executable: /bin/bash
