@@ -25,7 +25,7 @@ serviceWeb:
 serviceDns:
   type: NodePort
   port: 53
-  nodePort: "3053"  # Custom port to avoid conflicts with host port 53 (must be string)
+  nodePort: "3053" # Custom port to avoid conflicts with host port 53 (must be string)
 
 # Ingress configuration for Traefik
 ingress:
@@ -35,11 +35,10 @@ ingress:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
     cert-manager.io/cluster-issuer: letsencrypt-prod
+  path: /
+  pathType: ImplementationSpecific
   hosts:
-    - host: pihole.local
-      paths:
-        - path: /
-          pathType: Prefix
+    - pihole.local
   tls:
     - secretName: pihole-tls
       hosts:
