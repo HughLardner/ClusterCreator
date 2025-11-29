@@ -8,4 +8,3 @@ resources:
   - minio/application.yaml
   - grafana/application.yaml
   - pihole/application.yaml
-
