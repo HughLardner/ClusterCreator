@@ -23,9 +23,10 @@ serviceWeb:
 # Pi-hole DNS needs to be accessible on port 53
 # Using NodePort to expose DNS service
 serviceDns:
+  mixedService: true  # Combine TCP and UDP into a single service to avoid port conflicts
   type: NodePort
   port: 53
-  nodePort: "30053" # Valid NodePort range (30000-32767)
+  nodePort: "30053"  # Valid NodePort range (30000-32767)
 
 # Ingress configuration for Traefik
 ingress:
