@@ -290,16 +290,12 @@
         cmd: |
           # Use Python to properly construct JSON with escaped special characters
           # Python's json module handles escaping of $, !, and other special characters automatically
-          # Use base64 to safely pass the hash to Python, avoiding any shell escaping issues
-          HASH_B64=$(echo -n "{{ argocd_admin_password_hash.stdout }}" | base64 -w 0)
-          MTIME="$(date +%FT%T%Z)"
+          # Pass values via environment variables to avoid shell escaping issues
           python3 << 'PYTHON_EOF'
           import json
-          import base64
           import os
-          hash_b64 = os.environ["HASH_B64"]
+          hash_value = os.environ["HASH"]
           mtime = os.environ["MTIME"]
-          hash_value = base64.b64decode(hash_b64).decode('utf-8')
           patch_data = {
               "stringData": {
                   "admin.password": hash_value,
@@ -311,7 +307,7 @@
       args:
         executable: /bin/bash
       environment:
-        HASH_B64: "{{ argocd_admin_password_hash.stdout | b64encode }}"
+        HASH: "{{ argocd_admin_password_hash.stdout }}"
         MTIME: "{{ ansible_date_time.iso8601 }}"
       register: password_patch_json
       when: >
