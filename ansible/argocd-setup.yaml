@@ -291,6 +291,8 @@
           # Use Python to properly construct JSON with escaped special characters
           # Python's json module handles escaping of $, !, and other special characters automatically
           # Pass values via environment variables to avoid shell escaping issues
+          export HASH="{{ argocd_admin_password_hash.stdout }}"
+          export MTIME="$(date +%FT%T%Z)"
           python3 << 'PYTHON_EOF'
           import json
           import os
@@ -306,9 +308,6 @@
           PYTHON_EOF
       args:
         executable: /bin/bash
-      environment:
-        HASH: "{{ argocd_admin_password_hash.stdout }}"
-        MTIME: "{{ ansible_date_time.iso8601 }}"
       register: password_patch_json
       when: >
         argocd_admin_password is defined and
