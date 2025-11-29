@@ -290,19 +290,20 @@
         cmd: |
           # Use Python to properly construct JSON with escaped special characters
           # Python's json module handles escaping of $, !, and other special characters automatically
-          export HASH="{{ argocd_admin_password_hash.stdout }}"
-          export MTIME="$(date +%FT%T%Z)"
-          python3 << 'PYTHON_EOF'
+          # Pass values as command-line arguments to avoid shell escaping issues
+          python3 -c "
           import json
-          import os
+          import sys
+          hash_value = sys.argv[1]
+          mtime_value = sys.argv[2]
           patch_data = {
-              "stringData": {
-                  "admin.password": os.environ["HASH"],
-                  "admin.passwordMtime": os.environ["MTIME"]
+              'stringData': {
+                  'admin.password': hash_value,
+                  'admin.passwordMtime': mtime_value
               }
           }
           print(json.dumps(patch_data))
-          PYTHON_EOF
+          " "{{ argocd_admin_password_hash.stdout }}" "$(date +%FT%T%Z)"
       args:
         executable: /bin/bash
       register: password_patch_json
