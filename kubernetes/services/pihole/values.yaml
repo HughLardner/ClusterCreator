@@ -23,11 +23,11 @@ serviceWeb:
 # Pi-hole DNS needs to be accessible on port 53
 # Using LoadBalancer with MetalLB to get a dedicated IP address
 serviceDns:
-  mixedService: true  # Combine TCP and UDP into a single service
+  mixedService: true # Combine TCP and UDP into a single service
   type: LoadBalancer
   port: 53
   annotations:
-    metallb.universe.tf/address-pool: metallb-ipaddresspool
+    metallb.io/ip-allocated-from-pool: metallb-ipaddresspool
   # Enforce a specific IP address for Pi-hole DNS
   # This ensures Pi-hole always gets the same IP, making DNS configuration stable
   loadBalancerIP: "192.168.10.150"
