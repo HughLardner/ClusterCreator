@@ -43,8 +43,8 @@
     - name: Upgrade all packages to the latest version on controlplane-0
       become: true
       ansible.builtin.apt:
-        upgrade: 'dist'  # Use 'dist' for distribution upgrade, or 'full' for full upgrade
-        force_apt_get: yes  # Optionally force using apt-get instead of aptitude
+        upgrade: "dist" # Use 'dist' for distribution upgrade, or 'full' for full upgrade
+        force_apt_get: yes # Optionally force using apt-get instead of aptitude
         update_cache: yes
         autoremove: yes
         autoclean: yes
@@ -81,7 +81,7 @@
         cmd: >
           sed -i 's#path: /etc/kubernetes/admin.conf#path: /etc/kubernetes/super-admin.conf#' /etc/kubernetes/manifests/kube-vip.yaml
       become: true
-      when: not kube_config_exists.stat.exists and 
+      when: not kube_config_exists.stat.exists and
         ((kubernetes_medium_version.split('.')[0] | int == 1 and kubernetes_medium_version.split('.')[1] | int >= 29) or
         (kubernetes_medium_version.split('.')[0] | int > 1))
       tags:
@@ -145,7 +145,7 @@
         cmd: >
           sed -i 's#path: /etc/kubernetes/super-admin.conf#path: /etc/kubernetes/admin.conf#' /etc/kubernetes/manifests/kube-vip.yaml
       become: true
-      when: not kube_config_exists.stat.exists and 
+      when: not kube_config_exists.stat.exists and
         ((kubernetes_medium_version.split('.')[0] | int == 1 and kubernetes_medium_version.split('.')[1] | int >= 29) or
         (kubernetes_medium_version.split('.')[0] | int > 1))
       tags:

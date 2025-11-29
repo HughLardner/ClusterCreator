@@ -1,4 +1,3 @@
-
 - name: Delete node from Kubernetes Cluster
   hosts: controlplane
   gather_facts: false

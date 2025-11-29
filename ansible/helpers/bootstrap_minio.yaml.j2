@@ -1,0 +1,76 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.min.io/
+    targetRevision: {{ minio_chart_version }}
+    chart: minio
+    helm:
+      releaseName: minio
+      values: |
+        mode: {{ minio_mode }}
+        replicas: {{ minio_replicas }}
+        drivesPerNode: {{ minio_drives_per_node }}
+        persistence:
+          enabled: true
+          storageClass: {{ minio_storage_class }}
+          size: {{ minio_storage_size }}
+        resources:
+          requests:
+            memory: {{ minio_resources.requests.memory }}
+            cpu: {{ minio_resources.requests.cpu }}
+        ingress:
+          enabled: true
+          ingressClassName: {{ bootstrap_ingress_class }}
+          annotations:
+            traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+            traefik.ingress.kubernetes.io/router.tls: "true"
+            cert-manager.io/cluster-issuer: {{ bootstrap_cert_issuer }}
+          hosts:
+            - host: {{ minio_host }}.{{ bootstrap_domain }}
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: minio-tls
+              hosts:
+                - {{ minio_host }}.{{ bootstrap_domain }}
+        auth:
+          rootUser: ""
+          rootPassword: ""
+          existingSecret: minio-root-credentials
+          rootUserKey: root-user
+          rootPasswordKey: root-password
+        buckets:
+{% for bucket in minio_buckets %}
+          - name: {{ bucket.name }}
+            policy: {{ bucket.policy }}
+            purge: {{ bucket.purge | lower }}
+{% endfor %}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ minio_namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+

@@ -23,8 +23,8 @@
     - name: Upgrade all packages to the latest version on etcd nodes
       become: true
       ansible.builtin.apt:
-        upgrade: 'dist'  # Use 'dist' for distribution upgrade, or 'full' for full upgrade
-        force_apt_get: yes  # Optionally force using apt-get instead of aptitude
+        upgrade: "dist" # Use 'dist' for distribution upgrade, or 'full' for full upgrade
+        force_apt_get: yes # Optionally force using apt-get instead of aptitude
         update_cache: yes
         autoremove: yes
         autoclean: yes
@@ -57,7 +57,7 @@
       ansible.builtin.file:
         path: /etc/systemd/system/kubelet.service.d/
         state: directory
-        mode: '0755'
+        mode: "0755"
       tags:
         - etcd_kubelet_config
     - name: Create kubelet configuration file
@@ -77,7 +77,7 @@
           address: 127.0.0.1
           containerRuntimeEndpoint: unix:///var/run/containerd/containerd.sock
           staticPodPath: /etc/kubernetes/manifests
-        mode: '0644'
+        mode: "0644"
       tags:
         - etcd_kubelet_config
     - name: Create kubelet service override configuration
@@ -88,7 +88,7 @@
           ExecStart=
           ExecStart=/usr/bin/kubelet --config=/etc/systemd/system/kubelet.service.d/kubelet.conf
           Restart=always
-        mode: '0644'
+        mode: "0644"
       tags:
         - etcd_kubelet_config
     - name: Reload systemd daemon to apply changes
@@ -190,7 +190,7 @@
       ansible.builtin.file:
         path: "/root/.ssh"
         state: directory
-        mode: '0700'
+        mode: "0700"
         owner: root
         group: root
     - name: Copy root SSH key to target node
@@ -199,7 +199,7 @@
         dest: "/root/.ssh/ssh_key"
         owner: root
         group: root
-        mode: '0600'
+        mode: "0600"
 
 - name: Ensure specific directories and files do not exist on remaining etcd nodes
   hosts: etcd[1:]
@@ -237,7 +237,7 @@
       tags:
         - etcd_cert_copy
 - name: Synchronize PKI directories from etcd-0 to remaining etcd nodes
-  hosts: etcd[0]  # Running tasks from etcd-0
+  hosts: etcd[0] # Running tasks from etcd-0
   gather_facts: false
   any_errors_fatal: true
   vars:
@@ -246,7 +246,7 @@
     - name: Adjust permissions on PKI files for synchronization on etcd-0
       ansible.builtin.file:
         path: "/tmp/{{ hostvars[item].ansible_host }}/pki"
-        mode: 'u+r,g+r,o+r'  # Adds read permission for user, group, and others
+        mode: "u+r,g+r,o+r" # Adds read permission for user, group, and others
         recurse: yes
       loop: "{{ groups['etcd'][1:] }}"
       become: true
@@ -310,7 +310,7 @@
         - etcd_init
 
 - name: Transfer PKI files to controlplane-0 and organize them
-  hosts: etcd[0]  # Assuming this playbook runs on etcd-0
+  hosts: etcd[0] # Assuming this playbook runs on etcd-0
   gather_facts: false
   any_errors_fatal: true
   vars:
@@ -338,7 +338,7 @@
       tags:
         - kubeadm_config_copy
 - name: Prepare and organize PKI files on controlplane-0
-  hosts: controlplane[0]  # Targeting controlplane-0
+  hosts: controlplane[0] # Targeting controlplane-0
   gather_facts: false
   any_errors_fatal: true
   vars:
@@ -348,7 +348,7 @@
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: '0600'
+        mode: "0600"
       loop:
         - "/etc/kubernetes/pki"
         - "/etc/kubernetes/pki/etcd"
@@ -430,14 +430,14 @@
         state: directory
         owner: root
         group: root
-        mode: '0755'
+        mode: "0755"
     - name: Ensure /var/backups/etcd/daily directory exists
       file:
         path: /var/backups/etcd/daily
         state: directory
         owner: root
         group: root
-        mode: '0755'
+        mode: "0755"
     - name: Add cronjob for hourly etcdctl snapshot
       cron:
         name: "etcdctl hourly snapshot backup"
@@ -466,7 +466,6 @@
   tags:
     - etcd_performance_tuning
   tasks:
-
     - name: Set ionice for etcd process
       ansible.builtin.shell: "ionice -c2 -n0 -p $(pgrep etcd) || true"
 
@@ -509,7 +508,7 @@
   tasks:
     - name: Build the etcd health check command
       set_fact:
-        etcd_health_command: "watch -n 1 \"echo -------------------------- {{ inventory_hostname }} -------------------------- && sudo ETCDCTL_API=3 etcdctl --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --cacert /etc/kubernetes/pki/etcd/ca.crt --endpoints https://{{ ansible_host }}:2379 endpoint health || true && echo\""
+        etcd_health_command: 'watch -n 1 "echo -------------------------- {{ inventory_hostname }} -------------------------- && sudo ETCDCTL_API=3 etcdctl --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --cacert /etc/kubernetes/pki/etcd/ca.crt --endpoints https://{{ ansible_host }}:2379 endpoint health || true && echo"'
 
     - name: Add alias to .bashrc for monitoring etcd health
       lineinfile:
@@ -528,7 +527,7 @@
   tasks:
     - name: Build the etcd health check command
       set_fact:
-        etcd_health_all_command: "{{ etcd_health_all_command | default('') }}{{ 'watch -n 1 \"' if item == groups['etcd'][0] else ' && ' }}echo -------------------------- {{ item }} -------------------------- && sudo ETCDCTL_API=3 etcdctl --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --cacert /etc/kubernetes/pki/etcd/ca.crt --endpoints https://{{ item }}:2379 endpoint health || true && echo {{ '\"' if item == groups['etcd'][-1] else '' }}"
+        etcd_health_all_command: '{{ etcd_health_all_command | default('''') }}{{ ''watch -n 1 "'' if item == groups[''etcd''][0] else '' && '' }}echo -------------------------- {{ item }} -------------------------- && sudo ETCDCTL_API=3 etcdctl --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --cacert /etc/kubernetes/pki/etcd/ca.crt --endpoints https://{{ item }}:2379 endpoint health || true && echo {{ ''"'' if item == groups[''etcd''][-1] else '''' }}'
       loop: "{{ groups['etcd'] }}"
 
     - name: Add alias to .bashrc for monitoring etcd health

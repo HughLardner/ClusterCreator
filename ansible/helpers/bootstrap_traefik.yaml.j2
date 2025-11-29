@@ -1,0 +1,88 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    targetRevision: {{ traefik_chart_version }}
+    chart: traefik
+    helm:
+      releaseName: traefik
+      values: |
+        deployment:
+          replicas: {{ traefik_replicas }}
+        ingressRoute:
+          dashboard:
+            enabled: true
+            annotations:
+              traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+              traefik.ingress.kubernetes.io/router.tls: "true"
+            matchRule: Host(`{{ traefik_host }}.{{ bootstrap_domain }}`)
+            tls:
+              secretName: traefik-dashboard-tls
+        ports:
+          web:
+            port: 80
+            exposedPort: 80
+            protocol: TCP
+          websecure:
+            port: 443
+            exposedPort: 443
+            protocol: TCP
+        service:
+          type: {{ traefik_service_type }}
+          annotations:
+            metallb.universe.tf/address-pool: {{ traefik_metallb_pool }}
+        resources:
+          requests:
+            memory: {{ traefik_resources.requests.memory }}
+            cpu: {{ traefik_resources.requests.cpu }}
+          limits:
+            memory: {{ traefik_resources.limits.memory }}
+            cpu: {{ traefik_resources.limits.cpu }}
+        globalArguments:
+          - "--global.checknewversion=false"
+          - "--global.sendanonymoususage=false"
+        additionalArguments:
+          - "--entrypoints.web.address=:80"
+          - "--entrypoints.websecure.address=:443"
+          - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+          - "--certificatesresolvers.letsencrypt.acme.email={{ traefik_letsencrypt_email }}"
+          - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+          - "--providers.kubernetesingress=true"
+          - "--providers.kubernetescrd=true"
+          - "--api.dashboard=true"
+          - "--api.insecure=false"
+          - "--log.level=INFO"
+          - "--accesslog=true"
+          - "--metrics.prometheus=true"
+        podAnnotations:
+          prometheus.io/scrape: "true"
+          prometheus.io/port: "9100"
+          prometheus.io/path: "/metrics"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ traefik_namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+

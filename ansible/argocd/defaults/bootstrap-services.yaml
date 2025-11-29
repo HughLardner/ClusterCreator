@@ -1,0 +1,81 @@
+---
+# Bootstrap Services Configuration
+# These values configure the services deployed via Argo CD App of Apps pattern
+
+# Domain Configuration
+bootstrap_domain: "local" # Base domain for all services (e.g., "local", "example.com")
+bootstrap_ingress_class: "traefik"
+bootstrap_cert_issuer: "letsencrypt-prod" # cert-manager ClusterIssuer name
+
+# Traefik Configuration
+traefik_enabled: true
+traefik_chart_version: "27.0.0"
+traefik_namespace: "traefik-system"
+traefik_host: "traefik"
+traefik_replicas: 2
+traefik_letsencrypt_email: "admin@local" # Let's Encrypt email address
+traefik_service_type: "LoadBalancer"
+traefik_metallb_pool: "default"
+traefik_resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# Longhorn Configuration
+longhorn_enabled: true
+longhorn_chart_version: "1.6.1"
+longhorn_namespace: "longhorn-system"
+longhorn_host: "longhorn"
+longhorn_default_class: true
+longhorn_default_class_replica_count: 3
+longhorn_default_replica_count: 3
+longhorn_storage_over_provisioning_percentage: 100
+longhorn_storage_minimal_available_percentage: 25
+longhorn_default_data_locality: "disabled" # Options: disabled, best-effort, strict-local
+longhorn_guaranteed_engine_cpu: 0.25
+
+# MinIO Configuration
+minio_enabled: true
+minio_chart_version: "5.0.0"
+minio_namespace: "minio"
+minio_host: "minio"
+minio_mode: "distributed" # Options: distributed, standalone
+minio_replicas: 4
+minio_drives_per_node: 1
+minio_storage_class: "longhorn"
+minio_storage_size: "100Gi"
+minio_resources:
+  requests:
+    memory: "2Gi"
+    cpu: "1000m"
+minio_buckets:
+  - name: "argocd"
+    policy: "none" # Options: none, download, upload, public
+    purge: false
+  - name: "terraform-state"
+    policy: "none"
+    purge: false
+
+# Grafana Configuration
+grafana_enabled: true
+grafana_chart_version: "7.3.7"
+grafana_namespace: "monitoring"
+grafana_host: "grafana"
+grafana_storage_class: "longhorn"
+grafana_storage_size: "10Gi"
+grafana_resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+grafana_prometheus_url: "http://prometheus-server.monitoring:80"
+grafana_dashboards:
+  - name: "kubernetes"
+    gnetId: 7249
+    revision: 1
+    datasource: "Prometheus"

@@ -6,7 +6,7 @@
   vars:
     ansible_hosts_path: "tmp/{{ cluster_name }}/ansible-hosts.txt"
     cluster_config: "{{ lookup('file', 'tmp/' ~ cluster_name ~ '/cluster_config.json') | from_json }}"
-    etcd_group_exists: "{{ 'etcd' in groups }}"  # Check if the etcd group exists
+    etcd_group_exists: "{{ 'etcd' in groups }}" # Check if the etcd group exists
 
   tasks:
     - name: Read Ansible Hosts File
@@ -24,7 +24,7 @@
 
     - name: Parse Nodes, Labels, and Taints
       set_fact:
-        nodes_labels_and_taints: "{{ nodes_labels_and_taints + [{'hostname': item.split()[0], 'labels': (item.split('labels=\"')[1].split('\"')[0] if 'labels=\"' in item else '').split(','), 'taints': (item.split('taints=\"')[1].split('\"')[0] if 'taints=\"' in item else '').split(',') }] }}"
+        nodes_labels_and_taints: '{{ nodes_labels_and_taints + [{''hostname'': item.split()[0], ''labels'': (item.split(''labels="'')[1].split(''"'')[0] if ''labels="'' in item else '''').split('',''), ''taints'': (item.split(''taints="'')[1].split(''"'')[0] if ''taints="'' in item else '''').split('','') }] }}'
       loop: "{{ hosts_content.splitlines() }}"
       when: item | length > 0 and not item.startswith('#') and not 'labels=""' in item and not item.startswith('[') and not item.startswith('cluster_name=') and not item.startswith('ansible_python_interpreter=')
 
@@ -37,9 +37,9 @@
       loop_control:
         label: "{{ item.0.hostname }}:{{ item.1 }}"
       when:
-        - item.1 | length > 0  # Skip if taint is an empty string
-        - etcd_group_exists == false or item.0.hostname not in groups['etcd']  # Skip if in etcd group
-      ignore_errors: yes  # Handles cases where nodes aren't yet joined
+        - item.1 | length > 0 # Skip if taint is an empty string
+        - etcd_group_exists == false or item.0.hostname not in groups['etcd'] # Skip if in etcd group
+      ignore_errors: yes # Handles cases where nodes aren't yet joined
       environment:
         KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/{{ cluster_config.kubeconfig_file_name }}"
 
@@ -52,8 +52,8 @@
       loop_control:
         label: "{{ item.0.hostname }}:{{ item.1 }}"
       when:
-        - item.1 | length > 0  # Skip if taint is an empty string
-        - etcd_group_exists == false or item.0.hostname not in groups['etcd']  # Skip if in etcd group
-      ignore_errors: yes  # Handles cases where nodes aren't yet joined
+        - item.1 | length > 0 # Skip if taint is an empty string
+        - etcd_group_exists == false or item.0.hostname not in groups['etcd'] # Skip if in etcd group
+      ignore_errors: yes # Handles cases where nodes aren't yet joined
       environment:
         KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/{{ cluster_config.kubeconfig_file_name }}"

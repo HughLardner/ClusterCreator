@@ -1,0 +1,64 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.longhorn.io
+    targetRevision: {{ longhorn_chart_version }}
+    chart: longhorn
+    helm:
+      releaseName: longhorn
+      values: |
+        persistence:
+          defaultClass: {{ longhorn_default_class | lower }}
+          defaultClassReplicaCount: {{ longhorn_default_class_replica_count }}
+        defaultSettings:
+          defaultDataPath: /var/lib/longhorn
+          replicaSoftAntiAffinity: true
+          storageOverProvisioningPercentage: {{ longhorn_storage_over_provisioning_percentage }}
+          storageMinimalAvailablePercentage: {{ longhorn_storage_minimal_available_percentage }}
+          defaultReplicaCount: {{ longhorn_default_replica_count }}
+          defaultDataLocality: {{ longhorn_default_data_locality }}
+          guaranteedEngineCPU: {{ longhorn_guaranteed_engine_cpu }}
+        ingress:
+          enabled: true
+          ingressClassName: {{ bootstrap_ingress_class }}
+          annotations:
+            traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+            traefik.ingress.kubernetes.io/router.tls: "true"
+            cert-manager.io/cluster-issuer: {{ bootstrap_cert_issuer }}
+          hosts:
+            - host: {{ longhorn_host }}.{{ bootstrap_domain }}
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: longhorn-tls
+              hosts:
+                - {{ longhorn_host }}.{{ bootstrap_domain }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ longhorn_namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
