@@ -141,8 +141,13 @@
 
     - name: Generate bcrypt hash of admin password
       ansible.builtin.shell:
-        cmd: >
-          htpasswd -nbBC 10 "" {{ argocd_admin_password | quote }} | tr -d ':\n' | sed 's/$2y/$2a/'
+        cmd: |
+          # Use environment variable to safely pass password with special characters
+          export PASSWORD="{{ argocd_admin_password }}"
+          # Generate bcrypt hash using the same logic as generate-argocd-password-hash.sh
+          # htpasswd -nbBC 10 "" <password> generates: username:$2y$10$hash
+          # We need to remove the username: prefix and change $2y$ to $2a$ for Argo CD
+          htpasswd -nbBC 10 "" "$PASSWORD" | tr -d ':\n' | sed 's/$2y/$2a/'
       args:
         executable: /bin/bash
       register: argocd_admin_password_hash
@@ -283,11 +288,16 @@
     - name: Set custom admin password post-installation (if provided)
       ansible.builtin.shell:
         cmd: |
+          # Use jq to properly construct JSON with escaped special characters
+          # This ensures proper handling of $, !, and other special characters in the hash
+          export HASH="{{ argocd_admin_password_hash.stdout }}"
+          export MTIME="$(date +%FT%T%Z)"
           kubectl -n {{ argocd_namespace }} patch secret argocd-secret \
-            -p "{\"stringData\": {
-              \"admin.password\": \"{{ argocd_admin_password_hash.stdout }}\",
-              \"admin.passwordMtime\": \"$(date +%FT%T%Z)\"
-            }}"
+            --type merge \
+            -p "$(jq -n \
+              --arg hash "$HASH" \
+              --arg mtime "$MTIME" \
+              '{"stringData": {"admin.password": $hash, "admin.passwordMtime": $mtime}}')"
       args:
         executable: /bin/bash
       when: >
@@ -330,6 +340,19 @@
     - name: Restart ArgoCD server to apply password change
       ansible.builtin.shell:
         cmd: kubectl rollout restart deployment/argocd-server -n {{ argocd_namespace }}
+      args:
+        executable: /bin/bash
+      when: >
+        argocd_admin_password is defined and
+        argocd_admin_password | length > 0 and
+        argocd_admin_password_hash.stdout is defined and
+        secret_wait_result.stdout == "secret_exists"
+      tags:
+        - argocd_install
+
+    - name: Wait for ArgoCD server to be ready after password change
+      ansible.builtin.shell:
+        cmd: kubectl rollout status deployment/argocd-server --namespace {{ argocd_namespace }} --timeout=300s
       args:
         executable: /bin/bash
       when: >
